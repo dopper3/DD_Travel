@@ -14,7 +14,7 @@ export const airportRouter = router({
       (await db
         .selectFrom('airport')
         .selectAll()
-        .where('icao', 'ilike', input)
+        .where('icao', 'like', input)
         .executeTakeFirst()) ?? null
     );
   }),
@@ -23,7 +23,7 @@ export const airportRouter = router({
       (await db
         .selectFrom('airport')
         .selectAll()
-        .where('iata', 'ilike', input)
+        .where('iata', 'like', input)
         .executeTakeFirst()) ?? null
     );
   }),

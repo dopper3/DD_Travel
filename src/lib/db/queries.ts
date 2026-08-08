@@ -1,5 +1,5 @@
 import { type Expression, type Kysely, type Selectable, sql } from 'kysely';
-import { jsonArrayFrom, jsonObjectFrom } from 'kysely/helpers/postgres';
+import { jsonArrayFrom, jsonObjectFrom } from 'kysely/helpers/sqlite';
 
 import type { DB } from './schema';
 import type { CreateFlight, CreateFlightPassenger } from './types';
@@ -10,7 +10,14 @@ import {
   type FlightTrackInput,
 } from '$lib/track/schema';
 
-const airportDisplayName = sql<string>`regexp_replace("name", '\\s+International(\\s+Airport)?$', ' Intl.', 'i')`;
+// SQLite has no regexp_replace; shorten "... International [Airport]" with
+// suffix matching instead (LIKE is ASCII-case-insensitive, mirroring the
+// original regex's 'i' flag).
+const airportDisplayName = sql<string>`CASE
+  WHEN "name" LIKE '% International Airport' THEN substr("name", 1, length("name") - 22) || ' Intl.'
+  WHEN "name" LIKE '% International' THEN substr("name", 1, length("name") - 14) || ' Intl.'
+  ELSE "name"
+END`;
 
 const airportForClient = (db: Kysely<DB>) => {
   return db
@@ -44,15 +51,29 @@ const airports = (
   ];
 };
 
+// The SQLite json helpers cannot handle selectAll(), so columns are explicit.
 const aircraft = (db: Kysely<DB>, id: Expression<number | null>) => {
   return jsonObjectFrom(
-    db.selectFrom('aircraft').selectAll().where('aircraft.id', '=', id),
+    db
+      .selectFrom('aircraft')
+      .select(['aircraft.id', 'aircraft.name', 'aircraft.icao', 'aircraft.sourceId'])
+      .where('aircraft.id', '=', id),
   ).as('aircraft');
 };
 
 const airline = (db: Kysely<DB>, id: Expression<number | null>) => {
   return jsonObjectFrom(
-    db.selectFrom('airline').selectAll().where('airline.id', '=', id),
+    db
+      .selectFrom('airline')
+      .select([
+        'airline.id',
+        'airline.name',
+        'airline.icao',
+        'airline.iata',
+        'airline.iconPath',
+        'airline.sourceId',
+      ])
+      .where('airline.id', '=', id),
   ).as('airline');
 };
 
@@ -107,7 +128,16 @@ const passengers = (db: Kysely<DB>, flightId: Expression<number>) => {
   return jsonArrayFrom(
     db
       .selectFrom('flightPassenger')
-      .selectAll('flightPassenger')
+      .select([
+        'flightPassenger.id',
+        'flightPassenger.flightId',
+        'flightPassenger.userId',
+        'flightPassenger.guestName',
+        'flightPassenger.seat',
+        'flightPassenger.seatNumber',
+        'flightPassenger.seatClass',
+        'flightPassenger.flightReason',
+      ])
       .select(({ ref }) => [
         jsonObjectFrom(
           db
@@ -363,7 +393,7 @@ export const upsertFlightTrackPrimitiveWithConnection = async (
         sourceFormat: validTrack.sourceFormat,
         sourceName: validTrack.sourceName ?? null,
         pointCount: validTrack.coordinates.length,
-        updatedAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: new Date(),
       }),
     )
     .executeTakeFirstOrThrow();
@@ -472,16 +502,17 @@ export const findAirportsPrimitive = async (db: Kysely<DB>, input: string) => {
     ])
     .where((qb) =>
       qb.or([
-        qb('icao', 'ilike', input),
-        qb('iata', 'ilike', input),
-        sql<boolean>`unaccent("name") ILIKE unaccent(${namePattern})` as any,
+        qb('icao', 'like', input),
+        qb('iata', 'like', input),
+        // SQLite has no unaccent(); name search is accent-sensitive.
+        qb('name', 'like', namePattern),
       ]),
     )
     .select([
       sql`CASE
-              WHEN "icao" ILIKE ${input} THEN 1
-              WHEN "iata" ILIKE ${input} THEN 1
-              WHEN unaccent("name") ILIKE unaccent(${namePattern}) THEN 2
+              WHEN "icao" LIKE ${input} THEN 1
+              WHEN "iata" LIKE ${input} THEN 1
+              WHEN "name" LIKE ${namePattern} THEN 2
               ELSE 3
             END`.as('match_rank'),
       sql`CASE

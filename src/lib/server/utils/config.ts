@@ -110,7 +110,7 @@ export class AppConfig {
       parsed = appConfigSchema.safeParse(merged);
       if (!parsed.success) {
         console.error('Invalid app config in database:', parsed.error.issues);
-        process.exit(-1);
+        throw new Error('Invalid app config in database');
       }
 
       // Write the complete merged config back to DB
@@ -157,6 +157,9 @@ export class AppConfig {
     const envEntries = Object.entries(env).reduce<
       Record<string, string | number | boolean | null>
     >((acc, [key, value]) => {
+      // On Workers, env also contains bindings (D1, R2, ...); only plain
+      // string vars are configuration.
+      if (typeof value !== 'string') return acc;
       acc[key.toLowerCase()] = value ? this.#parseEnvValue(value) : true;
       return acc;
     }, {});
@@ -194,7 +197,7 @@ export class AppConfig {
     const validConfig = appConfigSchema.safeParse(merged);
     if (!validConfig.success) {
       console.error('Invalid app config in .env:', validConfig.error.issues);
-      process.exit(-1);
+      throw new Error('Invalid app config in environment');
     }
 
     await db.updateTable('appConfig').set('config', validConfig.data).execute();

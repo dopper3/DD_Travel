@@ -1,36 +1,44 @@
-import { type Handle, type ServerInit } from '@sveltejs/kit';
+import { type Handle } from '@sveltejs/kit';
 import { sequence } from '@sveltejs/kit/hooks';
 import type { Cookie } from 'lucia';
 
 import '$lib/zod/setup';
 import { lucia } from '$lib/server/auth';
-import { validateAirlineIcons } from '$lib/server/utils/airline';
+import { runWithRequestContext } from '$lib/server/data-layer';
 import { appConfig } from '$lib/server/utils/config';
-import {
-  ensureInitialDataSync,
-  syncAirlineIcons,
-} from '$lib/server/utils/sync';
-import { uploadManager } from '$lib/server/utils/uploads';
-import { ensureAirports } from '$lib/utils/data/airports/source';
 
-async function loadConfig() {
-  await appConfig.get();
-  await appConfig.loadFromEnv();
-}
-
-export const init: ServerInit = async () => {
-  try {
-    await loadConfig();
-  } catch (err) {
-    console.error('Error loading app config from .env:', err);
-    process.exit(-1);
+/**
+ * Establishes the per-request data layer (the D1 database and R2 uploads
+ * bindings) for everything downstream.
+ *
+ * The upstream ServerInit work (airport seeding, airline/aircraft sync, icon
+ * sync) is intentionally NOT run here: the database is pre-seeded and those
+ * jobs are admin-triggered actions on this deployment.
+ */
+const requestContextHandle: Handle = async ({ event, resolve }) => {
+  const env = event.platform?.env;
+  if (!env?.DB) {
+    // No bindings (e.g. prerendering at build time): no data layer available.
+    return resolve(event);
   }
 
-  await ensureAirports();
-  await uploadManager.init();
-  await ensureInitialDataSync();
-  await validateAirlineIcons();
-  await syncAirlineIcons({ onlyIfNoIcons: true });
+  return runWithRequestContext(env, async () => {
+    await ensureConfigLoaded();
+    return resolve(event);
+  });
+};
+
+// Config is merged from env into the DB once per isolate lifetime.
+let configLoaded: Promise<void> | undefined;
+const ensureConfigLoaded = (): Promise<void> => {
+  configLoaded ??= (async () => {
+    await appConfig.get();
+    await appConfig.loadFromEnv();
+  })().catch((err) => {
+    configLoaded = undefined;
+    throw err;
+  });
+  return configLoaded;
 };
 
 const authHandle: Handle = async ({ event, resolve }) => {
@@ -75,6 +83,7 @@ const dropExcessiveLinkHeaderHandle: Handle = async ({ event, resolve }) => {
 };
 
 export const handle: Handle = sequence(
+  requestContextHandle,
   authHandle,
   dropExcessiveLinkHeaderHandle,
 );

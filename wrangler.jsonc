@@ -1,0 +1,40 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "dd-travel",
+  "main": ".svelte-kit/cloudflare/_worker.js",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "binding": "ASSETS",
+    "directory": ".svelte-kit/cloudflare"
+  },
+  "routes": [
+    {
+      "pattern": "travel.coldwater.cc",
+      "custom_domain": true
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "dd-travel",
+      "database_id": "bf1e16a0-f626-4a52-8924-4cc304aa311a",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // TODO: R2 is not yet enabled on this Cloudflare account. Once enabled in
+  // the dashboard (R2 -> purchase/enable), run
+  //   bunx wrangler r2 bucket create dd-travel-uploads
+  // then uncomment this block and redeploy. Until then uploads are disabled
+  // (the app handles the missing binding gracefully).
+  // "r2_buckets": [
+  //   {
+  //     "binding": "UPLOADS",
+  //     "bucket_name": "dd-travel-uploads"
+  //   }
+  // ],
+  "vars": {
+    "ORIGIN": "https://travel.coldwater.cc"
+  },
+  "observability": { "enabled": true }
+}

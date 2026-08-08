@@ -1,7 +1,4 @@
-import { env } from '$env/dynamic/private';
-
-import * as fs from 'node:fs';
-import * as path from 'node:path';
+import { currentContext } from '$lib/server/data-layer';
 
 export const ALLOWED_IMAGE_TYPES = [
   'image/png',
@@ -12,94 +9,94 @@ export const ALLOWED_IMAGE_TYPES = [
 export const ALLOWED_IMAGE_EXTENSIONS = ['.png', '.jpg', '.svg', '.webp'];
 export const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
+const MIME_TYPES: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.svg': 'image/svg+xml',
+  '.webp': 'image/webp',
+};
+
+const contentTypeFor = (path: string): string => {
+  const ext = path.substring(path.lastIndexOf('.')).toLowerCase();
+  return MIME_TYPES[ext] || 'application/octet-stream';
+};
+
+const normalizeKey = (relativePath: string): string =>
+  relativePath.replace(/\\/g, '/').replace(/^\/+/, '');
+
+/**
+ * File uploads stored in the R2 bucket bound as UPLOADS (see wrangler.jsonc).
+ * Replaces the upstream filesystem-based implementation.
+ */
 class UploadManager {
-  #uploadLocation: string | null = null;
-  #isConfigured: boolean = false;
-  #isReady: boolean = false;
+  get #bucket() {
+    return currentContext().uploads;
+  }
 
   async init(): Promise<void> {
-    this.#uploadLocation = env.UPLOAD_LOCATION || null;
-
-    if (!this.#uploadLocation) {
-      console.warn('UPLOAD_LOCATION not set. File uploads will be disabled.');
-      return;
-    }
-
-    this.#isConfigured = true;
-
-    try {
-      // Check if directory exists
-      if (!fs.existsSync(this.#uploadLocation)) {
-        console.warn(
-          `UPLOAD_LOCATION "${this.#uploadLocation}" does not exist. File uploads will fail.`,
-        );
-        return;
-      }
-
-      // Check read/write permissions by attempting to create and delete a test file
-      const testFile = path.join(this.#uploadLocation, '.write_test');
-      fs.writeFileSync(testFile, 'test');
-      fs.unlinkSync(testFile);
-
-      this.#isReady = true;
-      console.log(`Upload location configured: ${this.#uploadLocation}`);
-    } catch (err) {
-      console.warn(
-        `UPLOAD_LOCATION "${this.#uploadLocation}" is not readable/writable. File uploads will fail.`,
-        err,
-      );
-    }
+    // Nothing to do: the R2 binding's availability is per-request.
   }
 
   get isConfigured(): boolean {
-    return this.#isConfigured;
+    return this.#bucket !== null;
   }
 
   get isReady(): boolean {
-    return this.#isReady;
+    return this.#bucket !== null;
   }
 
   get uploadLocation(): string | null {
-    return this.#uploadLocation;
+    return this.#bucket ? 'r2://uploads' : null;
   }
 
   getFilePath(relativePath: string): string | null {
-    if (!this.#uploadLocation) return null;
-    return path.join(this.#uploadLocation, relativePath);
+    if (!this.#bucket) return null;
+    return normalizeKey(relativePath);
   }
 
   async saveFile(
     relativePath: string,
     data: Buffer | Uint8Array,
   ): Promise<boolean> {
-    if (!this.#isReady || !this.#uploadLocation) return false;
+    const bucket = this.#bucket;
+    if (!bucket) return false;
 
-    const fullPath = path.join(this.#uploadLocation, relativePath);
-    const dir = path.dirname(fullPath);
-
-    // Ensure directory exists
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
-    fs.writeFileSync(fullPath, data);
+    const key = normalizeKey(relativePath);
+    await bucket.put(key, data as unknown as ArrayBuffer, {
+      httpMetadata: { contentType: contentTypeFor(key) },
+    });
     return true;
   }
 
   async deleteFile(relativePath: string): Promise<boolean> {
-    if (!this.#isReady || !this.#uploadLocation) return false;
+    const bucket = this.#bucket;
+    if (!bucket) return false;
 
-    const fullPath = path.join(this.#uploadLocation, relativePath);
-    if (fs.existsSync(fullPath)) {
-      fs.unlinkSync(fullPath);
-      return true;
-    }
-    return false;
+    await bucket.delete(normalizeKey(relativePath));
+    return true;
   }
 
-  fileExists(relativePath: string): boolean {
-    if (!this.#uploadLocation) return false;
-    return fs.existsSync(path.join(this.#uploadLocation, relativePath));
+  async getFile(
+    relativePath: string,
+  ): Promise<{ body: ReadableStream; contentType: string } | null> {
+    const bucket = this.#bucket;
+    if (!bucket) return null;
+
+    const key = normalizeKey(relativePath);
+    const object = await bucket.get(key);
+    if (!object) return null;
+
+    return {
+      body: object.body as unknown as ReadableStream,
+      contentType: object.httpMetadata?.contentType ?? contentTypeFor(key),
+    };
+  }
+
+  async fileExistsAsync(relativePath: string): Promise<boolean> {
+    const bucket = this.#bucket;
+    if (!bucket) return false;
+    return (await bucket.head(normalizeKey(relativePath))) !== null;
   }
 }
 

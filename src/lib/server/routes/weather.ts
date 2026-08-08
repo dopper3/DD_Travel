@@ -13,7 +13,7 @@ export const weatherRouter = router({
       const referenced = await db
         .selectFrom('airport')
         .select('airport.id')
-        .where('airport.icao', 'ilike', input)
+        .where('airport.icao', 'like', input)
         .where((eb) =>
           eb.or([
             eb.exists(

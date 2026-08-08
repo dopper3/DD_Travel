@@ -9,7 +9,9 @@ import { airportSourceSchema } from '$lib/zod/airport';
 
 import { getAirportTimezone, withBoundedGeoTzCache } from './timezone';
 
-export const BATCH_SIZE = 1000;
+// Small enough that a batch stays under D1's 100KB SQL statement limit once
+// the parameters are inlined (D1 allows only 100 bound parameters per query).
+export const BATCH_SIZE = 250;
 const AIRPORT_SOURCE_URL =
   'https://davidmegginson.github.io/ourairports-data/airports.csv';
 const ICAO_RE = /^[A-Z]{4}$/;
@@ -363,7 +365,17 @@ const updateAirportBatch = async (airports: Airport[]) => {
     return;
   }
 
+  // SQLite form: column names go on a CTE (SQLite cannot alias columns on a
+  // FROM (VALUES ...) table alias), and UPDATE ... FROM requires SQLite 3.33+.
   await sql`
+    WITH v(id, icao, iata, lat, lon, tz, name, municipality, type, continent, country, custom) AS (
+      VALUES ${sql.join(
+        airports.map(
+          (a) =>
+            sql`(${a.id}, ${a.icao}, ${a.iata}, ${a.lat}, ${a.lon}, ${a.tz}, ${a.name}, ${a.municipality}, ${a.type}, ${a.continent}, ${a.country}, ${a.custom ? 1 : 0})`,
+        ),
+      )}
+    )
     UPDATE airport SET
       icao = v.icao,
       iata = v.iata,
@@ -376,12 +388,7 @@ const updateAirportBatch = async (airports: Airport[]) => {
       continent = v.continent,
       country = v.country,
       custom = v.custom
-    FROM (VALUES ${sql.join(
-      airports.map(
-        (a) =>
-          sql`(${a.id}::int, ${a.icao}, ${a.iata}, ${a.lat}::float8, ${a.lon}::float8, ${a.tz}, ${a.name}, ${a.municipality}, ${a.type}, ${a.continent}, ${a.country}, ${a.custom}::bool)`,
-      ),
-    )}) AS v(id, icao, iata, lat, lon, tz, name, municipality, type, continent, country, custom)
+    FROM v
     WHERE airport.id = v.id
   `.execute(db);
 

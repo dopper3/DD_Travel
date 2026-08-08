@@ -104,3 +104,6 @@ prisma/temp.sql
 # and uncomment the following lines
 # .pnp.*
 .vscode/launch.json
+
+# Personal flight data - never push to public fork
+flight-data/

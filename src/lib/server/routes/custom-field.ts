@@ -18,9 +18,9 @@ import {
 
 const entityTypeSchema = z.enum(CUSTOM_FIELD_ENTITY_TYPES);
 
-/** Convert a JS value to a Kysely `::jsonb` expression, or null. */
+/** Convert a JS value to a JSON-text expression, or null. */
 const toJsonb = (value: unknown): RawBuilder<unknown> | null =>
-  value != null ? sql`${JSON.stringify(value)}::jsonb` : null;
+  value != null ? sql`${JSON.stringify(value)}` : null;
 const fieldTypeSchema = z.enum(CUSTOM_FIELD_TYPES);
 
 const validationSchema = z

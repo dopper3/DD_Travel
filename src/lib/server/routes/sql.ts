@@ -1,13 +1,16 @@
 import { z } from 'zod';
 
-import { pool } from '$lib/db';
+import { currentContext } from '$lib/server/data-layer';
 import { ownerProcedure, router } from '$lib/server/trpc';
 
 export const sqlRouter = router({
   execute: ownerProcedure.input(z.string()).query(async ({ input }) => {
     try {
-      const res = await pool.query(input);
-      return { cols: res.fields.map((f) => f.name), rows: res.rows };
+      // raw({ columnNames: true }) returns the column names as the first row.
+      const [cols = [], ...rows] = await currentContext()
+        .d1.prepare(input)
+        .raw({ columnNames: true });
+      return { cols: cols as string[], rows };
     } catch (err) {
       return { error: err instanceof Error ? err.message : 'Query failed' };
     }

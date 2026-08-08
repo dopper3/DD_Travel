@@ -20,7 +20,7 @@ export const airlineRouter = router({
     return await db
       .selectFrom('airline')
       .selectAll()
-      .where('iata', 'ilike', input)
+      .where('iata', 'like', input)
       .executeTakeFirst();
   }),
   getByName: authedProcedure.input(z.string()).query(async ({ input }) => {

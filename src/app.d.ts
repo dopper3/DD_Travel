@@ -13,6 +13,16 @@ declare global {
     namespace Superforms {
       type Message = { type: 'success' | 'error'; text: string; id?: number };
     }
+
+    interface Platform {
+      env: {
+        DB: import('@cloudflare/workers-types').D1Database;
+        UPLOADS: import('@cloudflare/workers-types').R2Bucket;
+        ORIGIN?: string;
+        [key: string]: unknown;
+      };
+      ctx: { waitUntil(promise: Promise<unknown>): void };
+    }
   }
 }
 

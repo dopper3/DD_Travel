@@ -23,7 +23,7 @@ export const getAircraftByIcao = async (
     (await db
       .selectFrom('aircraft')
       .selectAll()
-      .where('icao', 'ilike', input)
+      .where('icao', 'like', input)
       .executeTakeFirst()) ?? null
   );
 };
@@ -35,7 +35,7 @@ export const getAircraftByName = async (
     (await db
       .selectFrom('aircraft')
       .selectAll()
-      .where('name', 'ilike', input)
+      .where('name', 'like', input)
       .executeTakeFirst()) ?? null
   );
 };
@@ -49,12 +49,12 @@ export const findAircraft = async (
     .selectFrom('aircraft')
     .selectAll()
     .where((eb) =>
-      eb.or([eb('name', 'ilike', pattern), eb('icao', 'ilike', input)]),
+      eb.or([eb('name', 'like', pattern), eb('icao', 'like', input)]),
     )
     .select(
       sql`CASE
-            WHEN "icao" ILIKE ${input} THEN 1
-            WHEN "name" ILIKE ${pattern} THEN 2
+            WHEN "icao" LIKE ${input} THEN 1
+            WHEN "name" LIKE ${pattern} THEN 2
             ELSE 3
           END`.as('match_rank'),
     )

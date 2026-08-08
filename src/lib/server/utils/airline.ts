@@ -24,7 +24,7 @@ export const getAirlineByIcao = async (
     (await db
       .selectFrom('airline')
       .selectAll()
-      .where('icao', 'ilike', input)
+      .where('icao', 'like', input)
       .executeTakeFirst()) ?? null
   );
 };
@@ -36,7 +36,7 @@ export const getAirlineByIata = async (
     (await db
       .selectFrom('airline')
       .selectAll()
-      .where('iata', 'ilike', input)
+      .where('iata', 'like', input)
       .executeTakeFirst()) ?? null
   );
 };
@@ -48,7 +48,7 @@ export const getAirlineByName = async (
     (await db
       .selectFrom('airline')
       .selectAll()
-      .where('name', 'ilike', input)
+      .where('name', 'like', input)
       .executeTakeFirst()) ?? null
   );
 };
@@ -61,16 +61,16 @@ export const findAirline = async (input: string): Promise<Airline[] | null> => {
     .selectAll()
     .where((eb) =>
       eb.or([
-        eb('name', 'ilike', pattern),
-        eb('icao', 'ilike', input),
-        eb('iata', 'ilike', input),
+        eb('name', 'like', pattern),
+        eb('icao', 'like', input),
+        eb('iata', 'like', input),
       ]),
     )
     .select(
       sql`CASE
-            WHEN "icao" ILIKE ${input} THEN 1
-            WHEN "iata" ILIKE ${input} THEN 1
-            WHEN "name" ILIKE ${pattern} THEN 2
+            WHEN "icao" LIKE ${input} THEN 1
+            WHEN "iata" LIKE ${input} THEN 1
+            WHEN "name" LIKE ${pattern} THEN 2
             ELSE 3
           END`.as('match_rank'),
     )
@@ -103,7 +103,7 @@ export const validateAndSaveAirline = async (
     const conflict = await db
       .selectFrom('airline')
       .select(['id', 'name', 'iata'])
-      .where('iata', 'ilike', airline.iata)
+      .where('iata', 'like', airline.iata)
       .where('id', '!=', airline.id ?? -1)
       .executeTakeFirst();
     if (conflict) {
@@ -178,7 +178,10 @@ export const validateAirlineIcons = async (): Promise<void> => {
     .execute();
 
   for (const airline of airlines) {
-    if (airline.iconPath && !uploadManager.fileExists(airline.iconPath)) {
+    if (
+      airline.iconPath &&
+      !(await uploadManager.fileExistsAsync(airline.iconPath))
+    ) {
       console.warn(
         `Airline ${airline.id} has missing icon file: ${airline.iconPath}. Setting to null.`,
       );

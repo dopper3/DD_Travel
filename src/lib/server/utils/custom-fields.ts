@@ -53,7 +53,8 @@ const normalizeIncomingEntries = (values: IncomingValues) => {
   return normalized;
 };
 
-const toJsonb = (value: unknown) => sql`${JSON.stringify(value)}::jsonb`;
+// Stored as JSON text in SQLite; parsed back by the D1 result plugin.
+const toJsonb = (value: unknown) => sql`${JSON.stringify(value)}`;
 
 type Definition = {
   id: number;

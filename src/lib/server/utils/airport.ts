@@ -11,7 +11,7 @@ export const getAirport = async (input: number): Promise<Airport | null> => {
     (await db
       .selectFrom('airport')
       .selectAll()
-      .where('id', 'ilike', input)
+      .where('id', 'like', input)
       .executeTakeFirst()) ?? null
   );
 };
@@ -23,7 +23,7 @@ export const getAirportByIcao = async (
     (await db
       .selectFrom('airport')
       .selectAll()
-      .where('icao', 'ilike', input)
+      .where('icao', 'like', input)
       .executeTakeFirst()) ?? null
   );
 };
@@ -35,7 +35,7 @@ export const getAirportByIata = async (
     (await db
       .selectFrom('airport')
       .selectAll()
-      .where('iata', 'ilike', input)
+      .where('iata', 'like', input)
       .executeTakeFirst()) ?? null
   );
 };

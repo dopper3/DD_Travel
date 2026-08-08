@@ -1,6 +1,3 @@
-import { Readable } from 'node:stream';
-
-import * as tar from 'tar';
 import type { ZodType } from 'zod';
 
 import { airlinesDataSchema, aircraftListDataSchema } from '$lib/data/types';
@@ -10,8 +7,8 @@ import { uploadManager } from '$lib/server/utils/uploads';
 
 const GITHUB_RAW_BASE_URL =
   'https://raw.githubusercontent.com/johanohly/AirTrail/main';
-const GITHUB_TARBALL_URL =
-  'https://api.github.com/repos/johanohly/AirTrail/tarball/main';
+const GITHUB_ICON_TREE_URL =
+  'https://api.github.com/repos/johanohly/AirTrail/contents/data/icons/airlines?ref=main';
 
 interface SyncResult {
   added: number;
@@ -202,17 +199,18 @@ export const syncAircraft = async (options?: {
   return result;
 };
 
-type IconData = { buffer: Buffer; extension: string };
+type IconRef = { downloadUrl: string; extension: string };
 
 /**
- * Downloads the AirTrail repo tarball and extracts airline icons.
+ * Lists airline icons in the upstream repo via the GitHub contents API
+ * (Workers-friendly: no tarball download / tar parsing / node streams).
  * Icons are in data/icons/airlines/ named by sourceId (slug).
- * @returns Map of sourceId -> icon data (buffer + extension)
+ * @returns Map of sourceId -> icon reference (download URL + extension)
  */
-async function fetchAirlineIconsFromGitHub(): Promise<Map<string, IconData>> {
-  const sourceIdToIcon = new Map<string, IconData>();
+async function fetchAirlineIconList(): Promise<Map<string, IconRef>> {
+  const sourceIdToIcon = new Map<string, IconRef>();
 
-  const response = await fetch(GITHUB_TARBALL_URL, {
+  const response = await fetch(GITHUB_ICON_TREE_URL, {
     headers: {
       Accept: 'application/vnd.github+json',
       'User-Agent': 'AirTrail',
@@ -220,39 +218,40 @@ async function fetchAirlineIconsFromGitHub(): Promise<Map<string, IconData>> {
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch tarball: ${response.status}`);
+    throw new Error(`Failed to list icons: ${response.status}`);
   }
 
-  const buffer = Buffer.from(await response.arrayBuffer());
-  const readable = Readable.from(buffer);
+  const entries = (await response.json()) as Array<{
+    type: string;
+    name: string;
+    download_url: string | null;
+  }>;
 
-  await new Promise<void>((resolve, reject) => {
-    const parser = new tar.Parser({
-      filter: (path) => /\/data\/icons\/airlines\/[^/]+\.[a-z]+$/.test(path),
-      onReadEntry: (entry) => {
-        const chunks: Buffer[] = [];
-        entry.on('data', (chunk: Buffer) => chunks.push(chunk));
-        entry.on('end', () => {
-          const filename = entry.path.split('/').pop();
-          if (filename) {
-            const sourceId = filename.replace(/\.[^.]+$/, '');
-            const extension = filename.substring(filename.lastIndexOf('.'));
-            sourceIdToIcon.set(sourceId, {
-              buffer: Buffer.concat(chunks),
-              extension,
-            });
-          }
-        });
-      },
+  for (const entry of entries) {
+    if (entry.type !== 'file' || !entry.download_url) continue;
+    if (!/\.[a-z]+$/.test(entry.name)) continue;
+
+    const sourceId = entry.name.replace(/\.[^.]+$/, '');
+    const extension = entry.name.substring(entry.name.lastIndexOf('.'));
+    sourceIdToIcon.set(sourceId, {
+      downloadUrl: entry.download_url,
+      extension,
     });
-
-    parser.on('end', resolve);
-    parser.on('error', reject);
-
-    readable.pipe(parser);
-  });
+  }
 
   return sourceIdToIcon;
+}
+
+async function downloadIcon(icon: IconRef): Promise<Buffer> {
+  const response = await fetch(icon.downloadUrl, {
+    headers: { 'User-Agent': 'AirTrail' },
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Failed to download icon ${icon.downloadUrl}: ${response.status}`,
+    );
+  }
+  return Buffer.from(await response.arrayBuffer());
 }
 
 const hasAnyAirlineWithIcon = async (): Promise<boolean> => {
@@ -273,13 +272,14 @@ interface AirlineForIconSync {
 
 async function syncSingleAirlineIcon(
   airline: AirlineForIconSync,
-  iconData: IconData,
+  icon: IconRef,
   overwrite: boolean,
 ): Promise<boolean> {
-  const relativePath = `airlines/${airline.id}${iconData.extension}`;
+  const relativePath = `airlines/${airline.id}${icon.extension}`;
   const oldIconPath = airline.iconPath;
 
-  const success = await uploadManager.saveFile(relativePath, iconData.buffer);
+  const buffer = await downloadIcon(icon);
+  const success = await uploadManager.saveFile(relativePath, buffer);
   if (!success) return false;
 
   const shouldDeleteOld =
@@ -330,10 +330,10 @@ export const syncAirlineIcons = async (options?: {
   const airlines = await getAirlinesForIconSync(options?.overwrite ?? false);
   if (airlines.length === 0) return result;
 
-  let sourceIdToIcon: Map<string, IconData>;
+  let sourceIdToIcon: Map<string, IconRef>;
   try {
-    console.log('Fetching airline icons from GitHub...');
-    sourceIdToIcon = await fetchAirlineIconsFromGitHub();
+    console.log('Fetching airline icon list from GitHub...');
+    sourceIdToIcon = await fetchAirlineIconList();
     console.log(`Found ${sourceIdToIcon.size} icons in repository.`);
   } catch (err) {
     logError(
