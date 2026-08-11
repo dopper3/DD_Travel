@@ -1,5 +1,5 @@
 import { tz } from '@date-fns/tz/tz';
-import { addDays, isBefore } from 'date-fns';
+import { addDays, addSeconds, isBefore } from 'date-fns';
 import { z } from 'zod';
 
 import { page } from '$app/state';
@@ -157,11 +157,14 @@ export const processFR24File = async (
   const flights: CreateFlight[] = [];
   const unknownAirports: Record<string, number[]> = {};
   const unknownAirlines: Record<string, number[]> = {};
+  const unknownAircraft: Record<string, number[]> = {};
+  let droppedRows = 0;
   for (const row of data) {
     const normalizedDate = normalizeFR24Date(row.date);
     const fromCode = extractAirportICAO(row.from);
     const toCode = extractAirportICAO(row.to);
     if (!fromCode || !toCode) {
+      droppedRows++;
       continue;
     }
 
@@ -178,6 +181,13 @@ export const processFR24File = async (
       row.arr_time = null;
     }
 
+    const duration = row.duration
+      .split(':')
+      .reduce(
+        (acc, val, idx) => acc + parseInt(val) * Math.pow(60, 2 - idx),
+        0,
+      );
+
     const departure = row.dep_time
       ? toUtc(
           parseLocalISO(
@@ -186,25 +196,25 @@ export const processFR24File = async (
           ),
         )
       : null;
-    let arrival = row.arr_time
-      ? toUtc(
-          parseLocalISO(
-            `${normalizedDate.date}T${row.arr_time}`,
-            to?.tz || 'UTC',
-          ),
-        )
-      : null;
+    // FR24 exports an arrival time left empty as 00:00:00, so a lone
+    // midnight arrival is derived from the duration instead of being
+    // taken literally
+    let arrival =
+      row.arr_time && row.arr_time !== '00:00:00'
+        ? toUtc(
+            parseLocalISO(
+              `${normalizedDate.date}T${row.arr_time}`,
+              to?.tz || 'UTC',
+            ),
+          )
+        : null;
+    if (!arrival && departure && duration > 0) {
+      arrival = addSeconds(departure, duration, { in: tz('UTC') });
+    }
     while (departure && arrival && isBefore(arrival, departure)) {
       // arrival is before departure in UTC, so it must be on a later day
       arrival = addDays(arrival, 1, { in: tz('UTC') });
     }
-
-    const duration = row.duration
-      .split(':')
-      .reduce(
-        (acc, val, idx) => acc + parseInt(val) * Math.pow(60, 2 - idx),
-        0,
-      );
 
     const seatType = FR24_SEAT_TYPE_MAP?.[row.seat_type ?? 'noop'] ?? null;
     const seatClass =
@@ -221,10 +231,12 @@ export const processFR24File = async (
       (rawAirline ? (await getAirlineByIcao(rawAirline)) || null : null);
 
     const rawAircraft = row.aircraft ? extractAircraftICAO(row.aircraft) : null;
-    const aircraft = rawAircraft ? await getAircraftByIcao(rawAircraft) : null;
-    if (!aircraft && rawAircraft) {
-      console.warn(`Unknown aircraft ICAO code: ${rawAircraft}`);
-    }
+    const mappedAircraft = rawAircraft
+      ? options.aircraftMapping?.[rawAircraft]
+      : undefined;
+    const aircraft =
+      mappedAircraft ||
+      (rawAircraft ? (await getAircraftByIcao(rawAircraft)) || null : null);
 
     const flightIndex = flights.length;
 
@@ -239,6 +251,10 @@ export const processFR24File = async (
     if (!airline && rawAirline) {
       if (!unknownAirlines[rawAirline]) unknownAirlines[rawAirline] = [];
       unknownAirlines[rawAirline].push(flightIndex);
+    }
+    if (!aircraft && rawAircraft) {
+      if (!unknownAircraft[rawAircraft]) unknownAircraft[rawAircraft] = [];
+      unknownAircraft[rawAircraft].push(flightIndex);
     }
 
     flights.push({
@@ -282,9 +298,9 @@ export const processFR24File = async (
     unknowns: {
       airports: unknownAirports,
       airlines: unknownAirlines,
-      aircraft: {},
+      aircraft: unknownAircraft,
     },
     exportedUsers: [],
-    skippedRows: skipped.length,
+    skippedRows: skipped.length + droppedRows,
   };
 };
