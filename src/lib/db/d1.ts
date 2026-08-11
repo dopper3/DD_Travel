@@ -54,7 +54,8 @@ const serializeParameter = (value: unknown): D1BindValue => {
 const escapeLiteral = (value: D1BindValue): string => {
   if (value === null) return 'NULL';
   if (typeof value === 'number') {
-    if (!Number.isFinite(value)) throw new Error('Cannot inline non-finite number');
+    if (!Number.isFinite(value))
+      throw new Error('Cannot inline non-finite number');
     return String(value);
   }
   if (typeof value === 'string') {
@@ -298,7 +299,9 @@ const normalizeParsedJson = (value: unknown): unknown => {
   }
   if (value && typeof value === 'object') {
     const result: Record<string, unknown> = {};
-    for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    for (const [key, entry] of Object.entries(
+      value as Record<string, unknown>,
+    )) {
       const camelKey = camelize(key);
       if (BOOLEAN_COLUMNS.has(camelKey) && typeof entry === 'number') {
         result[camelKey] = entry !== 0;

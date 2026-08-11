@@ -56,7 +56,12 @@ const aircraft = (db: Kysely<DB>, id: Expression<number | null>) => {
   return jsonObjectFrom(
     db
       .selectFrom('aircraft')
-      .select(['aircraft.id', 'aircraft.name', 'aircraft.icao', 'aircraft.sourceId'])
+      .select([
+        'aircraft.id',
+        'aircraft.name',
+        'aircraft.icao',
+        'aircraft.sourceId',
+      ])
       .where('aircraft.id', '=', id),
   ).as('aircraft');
 };

@@ -14,7 +14,7 @@
     Popup,
   } from 'svelte-maplibre';
 
-  import { AirportPopup, ArcPopup } from '.';
+  import { AirportPopup, ArcPopup, StayPopup } from '.';
 
   import {
     normalizeRoute,
@@ -52,18 +52,21 @@
     type DeckPointerEvent,
   } from '$lib/map/map-popup-position';
   import { mapPreferences } from '$lib/map/map-preferences.svelte';
+  import type { StayPoint } from '$lib/map/stay-layer-data';
   import {
     closeMapDetails,
     mapDetailsState,
     openAirportDetails,
     openFlightDetails,
     openRouteDetails,
+    openStayDetails,
   } from '$lib/state.svelte';
   import type { FlightTrackRow } from '$lib/track/schema';
   import { type FlightData, prepareVisitedAirports } from '$lib/utils';
   import { isMediumScreen } from '$lib/utils/size';
 
   const AIRPORT_COLOR = (alpha: number): Color => [16, 185, 129, alpha]; // Tailwind emerald-500
+  const STAY_COLOR = (alpha: number): Color => [245, 158, 11, alpha]; // TW amber-500
   const INACTIVE_COLOR = (alpha: number): Color => [113, 113, 122, alpha];
   const FROM_COLOR = [59, 130, 246] as const; // Also the primary color
   const TO_COLOR = [139, 92, 246] as const; // TW violet-500
@@ -116,12 +119,14 @@
     flights,
     flightArcs,
     flightTracks = [],
+    stays = [],
     tempFilters = $bindable(),
     onNavigate,
   }: {
     flights: FlightData[];
     flightArcs: FlightArc[];
     flightTracks?: FlightTrackRow[];
+    stays?: StayPoint[];
     tempFilters?: TempFilters;
     onNavigate?: NavigateFlights;
   } = $props();
@@ -179,6 +184,7 @@
 
   let id = getId('deckgl-layer');
   let hoveredAirport: VisitedAirport | undefined = $state.raw(undefined);
+  let hoveredStay: StayPoint | undefined = $state.raw(undefined);
   let hoveredArc: FlightArc | FlightTrackPath | undefined =
     $state.raw(undefined);
   const clickable = $derived(tempFilters !== undefined);
@@ -255,6 +261,30 @@
   const handleAirportClick = (e: PickingInfo<VisitedAirport>) => {
     if (e.object && tempFilters) {
       openAirportDetails(e.object.id);
+    }
+  };
+
+  const handleStayHover = (
+    e: PickingInfo<StayPoint>,
+    event?: DeckPointerEvent,
+  ) => {
+    if (!isTouchDevice()) {
+      mapDetailsState.hoveredFlightTrackId = null;
+      hoveredStay = e.object ?? undefined;
+      popupPosition.update(getDeckPointerPixel(e, event));
+      const type = e.index !== -1 ? 'mousemove' : 'mouseleave';
+      layerEvent.value = {
+        ...e,
+        coordinate: getDeckPointerLngLat(e, event, map),
+        layerType: 'deckgl',
+        type,
+      };
+    }
+  };
+
+  const handleStayClick = (e: PickingInfo<StayPoint>) => {
+    if (e.object && tempFilters) {
+      openStayDetails(e.object.id);
     }
   };
 
@@ -555,6 +585,41 @@
     };
   });
 
+  const selectedStayId = $derived.by(() => {
+    const selection = mapDetailsState.selection;
+    return selection?.type === 'stay' ? selection.stayId : null;
+  });
+
+  const stayOptions = $derived.by(() => ({
+    id: 'stays-layer',
+    parameters: isGlobe
+      ? GLOBE_AIRPORT_PARAMETERS
+      : MERCATOR_AIRPORT_PARAMETERS,
+    extensions: [globeOcclusion],
+    data: stays,
+    getPosition: (stay: StayPoint): Position => stay.position,
+    getRadius: 20_000,
+    radiusMinPixels: 5,
+    radiusMaxPixels: 24,
+    lineWidthUnits: 'pixels' as const,
+    getLineWidth: (stay: StayPoint) => (stay.id === selectedStayId ? 2 : 1),
+    pickable: true,
+    onHover: handleStayHover,
+    onClick: handleStayClick,
+    getFillColor: (stay: StayPoint): Color =>
+      stay.id === selectedStayId
+        ? STAY_COLOR(180)
+        : hoveredStay?.id === stay.id
+          ? STAY_COLOR(140)
+          : STAY_COLOR(90),
+    getLineColor: (): Color => STAY_COLOR(255),
+    updateTriggers: {
+      getFillColor: [hoveredStay, selectedStayId],
+      getLineWidth: [selectedStayId],
+    },
+    stroked: true,
+  }));
+
   const arcOptions = $derived.by(() => ({
     id: 'arc-layer',
     parameters: isGlobe ? GLOBE_ARC_PARAMETERS : MERCATOR_ROUTE_PARAMETERS,
@@ -727,6 +792,9 @@
         },
       }),
     );
+    if (stays.length) {
+      layers.push(new ScatterplotLayer<StayPoint>(stayOptions));
+    }
     if (mapPreferences.airportCircles !== 'off') {
       layers.push(new ScatterplotLayer<VisitedAirport>(airportOptions));
     }
@@ -769,6 +837,9 @@
     });
   });
 
+  const isStayPoint = (data: unknown): data is StayPoint =>
+    typeof data === 'object' && data !== null && 'checkIn' in data;
+
   const isVisitedAirport = (data: unknown): data is VisitedAirport =>
     typeof data === 'object' && data !== null && 'country' in data;
 
@@ -784,7 +855,9 @@
     onopen={popupPosition.setPopup}
   >
     {#snippet children({ data })}
-      {#if isVisitedAirport(data)}
+      {#if isStayPoint(data)}
+        <StayPopup {data} {clickable} />
+      {:else if isVisitedAirport(data)}
         <AirportPopup {data} {clickable} />
       {:else if isFlightArc(data)}
         <ArcPopup {data} {clickable} />

@@ -75,6 +75,7 @@
     flightAddedState,
     mapDetailsState,
   } from '$lib/state.svelte';
+  import type { StayPoint } from '$lib/map/stay-layer-data';
   import type { FlightTrackRow } from '$lib/track/schema';
   import {
     cn,
@@ -92,6 +93,7 @@
     flights,
     filteredFlights,
     flightTracks = [],
+    stays = [],
     filters = $bindable(),
     tempFilters = $bindable(),
     onNavigate,
@@ -99,6 +101,7 @@
     flights: FlightData[];
     filteredFlights: FlightData[];
     flightTracks?: FlightTrackRow[];
+    stays?: StayPoint[];
     filters?: FlightFilters;
     tempFilters?: TempFilters;
     onNavigate?: NavigateFlights;
@@ -364,6 +367,15 @@
             zoom: 13,
           };
         }
+      } else if (selection.type === 'stay') {
+        const stay = stays.find((s) => s.id === selection.stayId);
+        if (stay) {
+          focusTarget = {
+            type: 'point',
+            center: stay.position,
+            zoom: 13,
+          };
+        }
       } else {
         // route or flight — both fit a single great-circle arc between two
         // airports, resolved by airport ID straight from the flights. The
@@ -582,6 +594,7 @@
       flights={drawnFlights}
       {flightArcs}
       {flightTracks}
+      {stays}
       bind:tempFilters
       {onNavigate}
     />

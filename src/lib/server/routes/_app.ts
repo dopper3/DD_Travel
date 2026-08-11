@@ -12,6 +12,7 @@ import { flightTrackRouter } from '$lib/server/routes/flight-track';
 import { oauthRouter } from '$lib/server/routes/oauth';
 import { shareRouter } from '$lib/server/routes/share';
 import { sqlRouter } from '$lib/server/routes/sql';
+import { stayRouter } from '$lib/server/routes/stay';
 import { visitedCountriesRouter } from '$lib/server/routes/visited-countries';
 import { weatherRouter } from '$lib/server/routes/weather';
 
@@ -26,6 +27,7 @@ export const appRouter = router({
   oauth: oauthRouter,
   autocomplete: autocompleteRouter,
   share: shareRouter,
+  stay: stayRouter,
   visitedCountries: visitedCountriesRouter,
   sql: sqlRouter,
   weather: weatherRouter,

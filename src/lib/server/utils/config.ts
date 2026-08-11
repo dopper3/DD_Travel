@@ -101,6 +101,9 @@ export class AppConfig {
         data: {
           lastSynced: null,
         },
+        emailImport: {
+          allowedSenders: '',
+        },
       };
 
       // Merge: defaults first, then overlay existing values

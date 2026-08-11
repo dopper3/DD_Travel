@@ -52,6 +52,7 @@ model user {
   api_keys          api_key[]
   public_share      public_share[]
   oauth_link_token  oauth_link_token?
+  stays             stay[]
 }
 
 model oauth_link_token {
@@ -211,6 +212,35 @@ model visited_country {
   user    user   @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@unique([code, user_id], map: "visited_country_code_user_id_key")
+}
+
+model stay {
+  id      Int     @id @default(autoincrement())
+  name    String
+  address String?
+  city    String?
+  /// ISO 3166-1 alpha-2 country code
+  country String?
+  lat     Float?
+  lon     Float?
+
+  /// YYYY-MM-DD
+  check_in          String
+  /// YYYY-MM-DD
+  check_out         String
+  confirmation_code String?
+  note              String?
+  /// @kyselyType('manual' | 'email')
+  source            String  @default("manual")
+
+  user_id String
+  user    user   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  created_at DateTime @default(now()) @db.Timestamptz
+  updated_at DateTime @default(now()) @db.Timestamptz
+
+  @@index([user_id], map: "stay_user_id_idx")
+  @@index([user_id, name, check_in], map: "stay_user_id_name_check_in_idx")
 }
 
 model session {

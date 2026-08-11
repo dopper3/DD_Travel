@@ -12,11 +12,13 @@
   import RouteDetailsBody from './RouteDetailsBody.svelte';
   import RouteDetailsContent from './RouteDetailsContent.svelte';
   import RouteDetailsHeader from './RouteDetailsHeader.svelte';
+  import StayDetailsContent from './StayDetailsContent.svelte';
   import { useAirportDetails } from './useAirportDetails.svelte';
   import { useFlightDetails } from './useFlightDetails.svelte';
   import { useRouteDetails } from './useRouteDetails.svelte';
 
   import type { FlightFilters } from '$lib/components/flight-filters/types';
+  import type { StayListItem } from '$lib/db/types';
   import type { NavigateFlights } from '$lib/flight-navigation';
   import { closeMapDetails, mapDetailsState } from '$lib/state.svelte';
   import type { FlightData } from '$lib/utils';
@@ -24,14 +26,20 @@
 
   let {
     flights,
+    stays = [],
     filters = $bindable(),
     seatUserId,
     onNavigate,
+    onEditStay,
+    onDeleteStay,
   }: {
     flights: FlightData[];
+    stays?: StayListItem[];
     filters?: FlightFilters;
     seatUserId?: string;
     onNavigate: NavigateFlights;
+    onEditStay?: (stay: StayListItem) => void;
+    onDeleteStay?: (stay: StayListItem) => void;
   } = $props();
 
   const navigateFlights: NavigateFlights = (intent) => onNavigate(intent);
@@ -58,6 +66,12 @@
     return false;
   });
 </script>
+
+<StayDetailsContent
+  {stays}
+  onEdit={(stay) => onEditStay?.(stay)}
+  onDelete={(stay) => onDeleteStay?.(stay)}
+/>
 
 {#if $isMediumScreen}
   <AirportDetailsContent details={airport} hasFilters={!!filters} />

@@ -1,5 +1,6 @@
 <script lang="ts">
   import {
+    BedDouble,
     ChartColumn,
     GitBranchPlus,
     Grip,
@@ -33,6 +34,14 @@
     testId: 'list-flights-button',
     onClick: () => {
       openModalsState.listFlights = true;
+    },
+  };
+  const listStaysItem = {
+    label: 'Stays',
+    icon: BedDouble,
+    testId: 'list-stays-button',
+    onClick: () => {
+      openModalsState.listStays = true;
     },
   };
   const flightsStatisticsItem = {
@@ -81,6 +90,7 @@
       <DockTooltipItem item={addFlightItem} />
       {#if page.url.pathname === '/'}
         <DockTooltipItem item={listFlightsItem} />
+        <DockTooltipItem item={listStaysItem} />
         <DockTooltipItem item={flightsStatisticsItem} />
       {/if}
       <DockDropdownItem items={OTHER} label="More">

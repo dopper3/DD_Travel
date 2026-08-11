@@ -43,11 +43,17 @@ export const dataConfigSchema = z.object({
   lastSynced: z.string().nullable(),
 });
 
+export const emailImportConfigSchema = z.object({
+  // Comma-separated addresses; "@domain" entries allow a whole domain.
+  allowedSenders: z.string().default(''),
+});
+
 export const appConfigSchema = z.object({
   oauth: oauthConfigSchema,
   integrations: integrationsConfigSchema,
   map: mapConfigSchema,
   data: dataConfigSchema,
+  emailImport: emailImportConfigSchema,
 });
 
 export const clientAppConfigSchema = appConfigSchema.extend({
@@ -55,5 +61,8 @@ export const clientAppConfigSchema = appConfigSchema.extend({
   integrations: appConfigSchema.shape.integrations.omit({
     aeroDataBoxKey: true,
     openAipKey: true,
+  }),
+  emailImport: appConfigSchema.shape.emailImport.omit({
+    allowedSenders: true,
   }),
 });

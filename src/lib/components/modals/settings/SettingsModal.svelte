@@ -15,6 +15,7 @@
     DataPage,
     CustomFieldsPage,
     IntegrationsPage,
+    EmailImportPage,
   } from './pages';
 
   import { version } from '$app/environment';
@@ -42,6 +43,7 @@
     { title: 'Data', id: 'data' },
     { title: 'Custom Fields', id: 'custom-fields' },
     { title: 'Integrations', id: 'integrations' },
+    { title: 'Email Import', id: 'email-import' },
     { title: 'Users', id: 'users' },
     { title: 'OAuth', id: 'oauth' },
   ] as const;
@@ -197,6 +199,8 @@
             <CustomFieldsPage />
           {:else if activeTab === 'integrations'}
             <IntegrationsPage />
+          {:else if activeTab === 'email-import'}
+            <EmailImportPage />
           {:else if activeTab === 'users'}
             <UsersPage />
           {:else if activeTab === 'oauth'}

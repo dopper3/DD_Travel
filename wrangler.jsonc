@@ -1,6 +1,8 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "dd-travel",
+  // The adapter writes the SvelteKit worker here; patch-cloudflare-build.ts
+  // then grafts the email handler (flight imports) onto it post-build.
   "main": ".svelte-kit/cloudflare/_worker.js",
   "compatibility_date": "2026-08-01",
   "compatibility_flags": ["nodejs_compat"],
@@ -35,6 +37,9 @@
   // ],
   "vars": {
     "ORIGIN": "https://travel.coldwater.cc"
+    // The email-import sender allowlist is managed in the UI
+    // (Settings -> Email Import). To force it via env instead, set
+    // EMAIL_IMPORT_ALLOWED_SENDERS here (this also locks the UI field).
   },
   "observability": { "enabled": true }
 }

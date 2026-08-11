@@ -205,6 +205,35 @@ export type session = {
     expiresAt: Timestamp;
     userId: string;
 };
+export type stay = {
+    id: Generated<number>;
+    name: string;
+    address: string | null;
+    city: string | null;
+    /**
+     * ISO 3166-1 alpha-2 country code
+     */
+    country: string | null;
+    lat: number | null;
+    lon: number | null;
+    /**
+     * YYYY-MM-DD
+     */
+    checkIn: string;
+    /**
+     * YYYY-MM-DD
+     */
+    checkOut: string;
+    confirmationCode: string | null;
+    note: string | null;
+    /**
+     * @kyselyType('manual' | 'email')
+     */
+    source: Generated<'manual' | 'email'>;
+    userId: string;
+    createdAt: Generated<Timestamp>;
+    updatedAt: Generated<Timestamp>;
+};
 export type user = {
     id: string;
     username: string;
@@ -275,6 +304,7 @@ export type DB = {
     oauthLinkToken: oauth_link_token;
     publicShare: public_share;
     session: session;
+    stay: stay;
     user: user;
     visitedCountry: visited_country;
 };

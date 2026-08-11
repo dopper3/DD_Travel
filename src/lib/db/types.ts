@@ -7,6 +7,7 @@ import type {
   flight_track,
   public_share,
   flight_passenger,
+  stay,
   user,
   visited_country,
 } from '$lib/db/schema';
@@ -51,6 +52,13 @@ export type Flight = Omit<
   airline: Airline | null;
 };
 export type FlightTrack = Selectable<flight_track>;
+export type Stay = Selectable<stay>;
+export type StayListItem = Omit<Stay, 'userId' | 'createdAt' | 'updatedAt'>;
+export type CreateStay = Omit<
+  Insertable<stay>,
+  'id' | 'userId' | 'createdAt' | 'updatedAt'
+>;
+export const StaySources = ['manual', 'email'] as const;
 type CreateFlightAirport = Partial<Airport>;
 type CreateFlightEntityReference<T extends { id: number }> = Omit<
   Partial<T>,

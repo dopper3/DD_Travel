@@ -44,6 +44,8 @@ export type SettingsTabId =
 export type OpenModalsState = {
   addFlight: boolean;
   listFlights: boolean;
+  addStay: boolean;
+  listStays: boolean;
   statistics: boolean;
   settings: boolean;
   settingsTab: SettingsTabId;
@@ -52,6 +54,8 @@ export type OpenModalsState = {
 export const openModalsState = $state<OpenModalsState>({
   addFlight: false,
   listFlights: false,
+  addStay: false,
+  listStays: false,
   statistics: false,
   settings: false,
   settingsTab: 'general',
@@ -60,7 +64,8 @@ export const openModalsState = $state<OpenModalsState>({
 export type MapDetailsSelection =
   | { type: 'airport'; airportId: number }
   | { type: 'route'; route: Route }
-  | { type: 'flight'; flightId: number };
+  | { type: 'flight'; flightId: number }
+  | { type: 'stay'; stayId: number };
 
 export const mapDetailsState = $state<{
   selection: MapDetailsSelection | null;
@@ -87,6 +92,11 @@ export const openRouteDetails = (route: Route) => {
 
 export const openFlightDetails = (flightId: number) => {
   mapDetailsState.selection = { type: 'flight', flightId };
+  mapDetailsState.focusRequest += 1;
+};
+
+export const openStayDetails = (stayId: number) => {
+  mapDetailsState.selection = { type: 'stay', stayId };
   mapDetailsState.focusRequest += 1;
 };
 

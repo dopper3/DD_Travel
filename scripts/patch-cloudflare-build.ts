@@ -33,3 +33,29 @@ for (const file of walk(SERVER_DIR)) {
   }
 }
 console.log(`patch-cloudflare-build: ${patched} file(s) patched`);
+
+/**
+ * Graft the email handler onto the generated worker. The adapter only emits a
+ * `fetch` handler; flight-confirmation imports arrive via Cloudflare Email
+ * Routing, which invokes `email()` on the same Worker. Wrangler bundles
+ * `_worker.js` at deploy time, so the added import resolves normally.
+ */
+const WORKER_FILE = '.svelte-kit/cloudflare/_worker.js';
+const EXPORT_NEEDLE = 'export {\n  worker_default as default\n};';
+const worker = readFileSync(WORKER_FILE, 'utf8');
+if (!worker.includes(EXPORT_NEEDLE)) {
+  throw new Error(
+    `patch-cloudflare-build: default export not found in ${WORKER_FILE}; ` +
+      'the adapter output shape changed - update the email-handler graft',
+  );
+}
+writeFileSync(
+  WORKER_FILE,
+  worker.replace(
+    EXPORT_NEEDLE,
+    'import { handleFlightEmail } from "../../src/worker/email.ts";\n' +
+      'worker_default.email = handleFlightEmail;\n' +
+      EXPORT_NEEDLE,
+  ),
+);
+console.log(`patch-cloudflare-build: email handler grafted onto ${WORKER_FILE}`);

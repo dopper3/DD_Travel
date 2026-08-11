@@ -18,7 +18,12 @@
   } from '$lib/components/flight-filters/types';
   import { Map } from '$lib/components/map';
   import { MapDetailsPane } from '$lib/components/map-details';
-  import { ListFlightsModal, StatisticsModal } from '$lib/components/modals';
+  import {
+    ListFlightsModal,
+    ListStaysModal,
+    StatisticsModal,
+    StayModal,
+  } from '$lib/components/modals';
   import FlightsOnboarding from '$lib/components/onboarding/FlightsOnboarding.svelte';
   import { createFlightNavigator } from '$lib/flight-navigation';
   import { includeFocusedFlightInList } from '$lib/flight-visibility';
@@ -31,6 +36,8 @@
     openFlightDetails,
     openModalsState,
   } from '$lib/state.svelte';
+  import type { StayListItem } from '$lib/db/types';
+  import { prepareStayPoints } from '$lib/map/stay-layer-data';
   import { trpc } from '$lib/trpc';
   import { prepareFlightData } from '$lib/utils';
 
@@ -54,6 +61,7 @@
   const rawFlights = trpc.flight.list.query(flightListInput);
   const rawFlightTracks = trpc.flightTrack.list.query(flightListInput);
   const rawVisitedCountries = trpc.visitedCountries.list.query();
+  const rawStays = trpc.stay.list.query();
 
   const flights = $derived.by(() => {
     const data = $rawFlights.data;
@@ -66,6 +74,16 @@
     const selection = mapDetailsState.selection;
     if ($rawFlights.isLoading || selection?.type !== 'flight') return;
     if (flights.some((flight) => flight.id === selection.flightId)) return;
+    closeMapDetails();
+  });
+
+  const stays = $derived($rawStays.data ?? []);
+  const stayPoints = $derived(prepareStayPoints(stays));
+
+  $effect(() => {
+    const selection = mapDetailsState.selection;
+    if ($rawStays.isLoading || selection?.type !== 'stay') return;
+    if (stays.some((stay) => stay.id === selection.stayId)) return;
     closeMapDetails();
   });
 
@@ -150,6 +168,37 @@
     }
   };
 
+  let editedStay = $state<StayListItem | null>(null);
+
+  const openAddStay = () => {
+    editedStay = null;
+    openModalsState.addStay = true;
+  };
+
+  const openEditStay = (stay: StayListItem) => {
+    editedStay = stay;
+    openModalsState.addStay = true;
+  };
+
+  const invalidateStays = () => {
+    trpc.stay.list.utils.invalidate();
+  };
+
+  const deleteStayMutation = trpc.stay.delete.mutation({
+    onSuccess: invalidateStays,
+  });
+
+  const deleteStay = async (stay: StayListItem) => {
+    const toastId = toast.loading('Deleting stay...');
+    try {
+      await $deleteStayMutation.mutateAsync(stay.id);
+      toast.success('Stay deleted', { id: toastId });
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to delete stay', { id: toastId });
+    }
+  };
+
   const navigateFlights = createFlightNavigator({
     getState: () => ({
       tempFilters,
@@ -196,6 +245,18 @@
   {showPassengerDetails}
   onNavigate={navigateFlights}
 />
+<ListStaysModal
+  bind:open={openModalsState.listStays}
+  {stays}
+  onAdd={openAddStay}
+  onEdit={openEditStay}
+  onDelete={deleteStay}
+/>
+<StayModal
+  bind:open={openModalsState.addStay}
+  stay={editedStay}
+  onSaved={invalidateStays}
+/>
 <StatisticsModal
   bind:open={openModalsState.statistics}
   {flights}
@@ -213,11 +274,15 @@
   {flights}
   {filteredFlights}
   {flightTracks}
+  stays={stayPoints}
   onNavigate={navigateFlights}
 />
 <MapDetailsPane
   {flights}
+  {stays}
   bind:filters
   seatUserId={effectiveSeatUserId}
   onNavigate={navigateFlights}
+  onEditStay={openEditStay}
+  onDeleteStay={deleteStay}
 />
