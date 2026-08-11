@@ -1,11 +1,15 @@
 <script lang="ts">
-  import { Pencil, Trash } from '@o7/icon/lucide';
+  import { BedDouble, Pencil, Trash } from '@o7/icon/lucide';
 
   import DetailsActionButton from './DetailsActionButton.svelte';
   import MapDetailsFrame from './MapDetailsFrame.svelte';
 
   import type { StayListItem } from '$lib/db/types';
-  import { closeMapDetails, mapDetailsState } from '$lib/state.svelte';
+  import {
+    closeMapDetails,
+    mapDetailsState,
+    openStayDetails,
+  } from '$lib/state.svelte';
 
   let {
     stays,
@@ -22,6 +26,30 @@
     if (selection?.type !== 'stay') return null;
     return stays.find((s) => s.id === selection.stayId) ?? null;
   });
+
+  const normalize = (s: string) => s.trim().toLowerCase();
+
+  const sameHotel = (a: StayListItem, b: StayListItem) =>
+    normalize(a.name) === normalize(b.name) &&
+    (!a.city || !b.city || normalize(a.city) === normalize(b.city));
+
+  const hotelStays = $derived.by(() => {
+    if (!stay) return [];
+    const current = stay;
+    return stays
+      .filter((s) => sameHotel(s, current))
+      .toSorted((a, b) => b.checkIn.localeCompare(a.checkIn));
+  });
+
+  const nights = (s: StayListItem) =>
+    Math.max(
+      1,
+      Math.round((Date.parse(s.checkOut) - Date.parse(s.checkIn)) / 86_400_000),
+    );
+
+  const totalNights = $derived(
+    hotelStays.reduce((sum, s) => sum + nights(s), 0),
+  );
 </script>
 
 {#snippet header()}
@@ -102,6 +130,44 @@
         <p class="text-xs text-amber-600 dark:text-amber-500">
           No location set — edit this stay to place it on the map.
         </p>
+      {/if}
+      {#if hotelStays.length > 1}
+        <div>
+          <div class="flex items-center gap-2">
+            <BedDouble size={14} class="text-muted-foreground" />
+            <h4 class="text-xs uppercase tracking-wider text-muted-foreground">
+              Stays here
+            </h4>
+            <span class="ml-auto text-xs text-muted-foreground">
+              {hotelStays.length} stays · {totalNights} nights
+            </span>
+          </div>
+          <ul class="mt-1 flex flex-col divide-y divide-border/50">
+            {#each hotelStays as s (s.id)}
+              <li>
+                <button
+                  type="button"
+                  class="flex w-full cursor-pointer items-center justify-between gap-3 rounded-md px-2 py-2 text-left transition-colors hover:bg-background/55 focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none {s.id ===
+                  stay.id
+                    ? 'bg-background/40'
+                    : ''}"
+                  onclick={() => openStayDetails(s.id)}
+                  aria-label="Open stay from {s.checkIn} to {s.checkOut}"
+                >
+                  <span class="text-sm tabular-nums">
+                    {s.checkIn} → {s.checkOut}
+                  </span>
+                  <span
+                    class="shrink-0 text-xs font-medium text-muted-foreground tabular-nums"
+                  >
+                    {nights(s)}
+                    {nights(s) === 1 ? 'night' : 'nights'}
+                  </span>
+                </button>
+              </li>
+            {/each}
+          </ul>
+        </div>
       {/if}
     </div>
   {/if}
