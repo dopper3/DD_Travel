@@ -24,17 +24,12 @@
       "migrations_dir": "migrations"
     }
   ],
-  // TODO: R2 is not yet enabled on this Cloudflare account. Once enabled in
-  // the dashboard (R2 -> purchase/enable), run
-  //   bunx wrangler r2 bucket create dd-travel-uploads
-  // then uncomment this block and redeploy. Until then uploads are disabled
-  // (the app handles the missing binding gracefully).
-  // "r2_buckets": [
-  //   {
-  //     "binding": "UPLOADS",
-  //     "bucket_name": "dd-travel-uploads"
-  //   }
-  // ],
+  "r2_buckets": [
+    {
+      "binding": "UPLOADS",
+      "bucket_name": "dd-travel-uploads"
+    }
+  ],
   "vars": {
     "ORIGIN": "https://travel.coldwater.cc"
     // The email-import sender allowlist is managed in the UI
