@@ -16,6 +16,7 @@
     CustomFieldsPage,
     IntegrationsPage,
     EmailImportPage,
+    CalendarPage,
   } from './pages';
 
   import { version } from '$app/environment';
@@ -36,6 +37,7 @@
     { title: 'Security', id: 'security' },
     { title: 'Appearance', id: 'appearance' },
     { title: 'Share', id: 'share' },
+    { title: 'Calendar', id: 'calendar' },
     { title: 'Import', id: 'import' },
     { title: 'Export', id: 'export' },
   ] as const;
@@ -189,6 +191,8 @@
             <AppearancePage />
           {:else if activeTab === 'share'}
             <SharePage />
+          {:else if activeTab === 'calendar'}
+            <CalendarPage />
           {:else if activeTab === 'import'}
             <ImportPage bind:open />
           {:else if activeTab === 'export'}

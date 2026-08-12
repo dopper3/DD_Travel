@@ -104,6 +104,9 @@ export class AppConfig {
         emailImport: {
           allowedSenders: '',
         },
+        calendar: {
+          feedToken: null,
+        },
       };
 
       // Merge: defaults first, then overlay existing values

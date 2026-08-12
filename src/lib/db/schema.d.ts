@@ -87,6 +87,37 @@ export type custom_field_value = {
     createdAt: Generated<Timestamp>;
     updatedAt: Timestamp;
 };
+export type event = {
+    id: Generated<number>;
+    title: string;
+    description: string | null;
+    location: string | null;
+    lat: number | null;
+    lon: number | null;
+    /**
+     * YYYY-MM-DD
+     */
+    startDate: string;
+    /**
+     * HH:MM (24h); NULL means all-day
+     */
+    startTime: string | null;
+    /**
+     * YYYY-MM-DD
+     */
+    endDate: string | null;
+    /**
+     * HH:MM (24h)
+     */
+    endTime: string | null;
+    /**
+     * @kyselyType('manual' | 'email')
+     */
+    source: Generated<'manual' | 'email'>;
+    userId: string;
+    createdAt: Generated<Timestamp>;
+    updatedAt: Generated<Timestamp>;
+};
 export type flight = {
     id: Generated<number>;
     date: string;
@@ -298,6 +329,7 @@ export type DB = {
     appConfig: app_config;
     customFieldDefinition: custom_field_definition;
     customFieldValue: custom_field_value;
+    event: event;
     flight: flight;
     flightPassenger: flight_passenger;
     flightTrack: flight_track;

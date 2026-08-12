@@ -53,6 +53,7 @@ model user {
   public_share      public_share[]
   oauth_link_token  oauth_link_token?
   stays             stay[]
+  events            event[]
 }
 
 model oauth_link_token {
@@ -241,6 +242,35 @@ model stay {
 
   @@index([user_id], map: "stay_user_id_idx")
   @@index([user_id, name, check_in], map: "stay_user_id_name_check_in_idx")
+}
+
+model event {
+  id          Int     @id @default(autoincrement())
+  title       String
+  description String?
+  location    String?
+  lat         Float?
+  lon         Float?
+
+  /// YYYY-MM-DD
+  start_date String
+  /// HH:MM (24h); NULL means all-day
+  start_time String?
+  /// YYYY-MM-DD
+  end_date   String?
+  /// HH:MM (24h)
+  end_time   String?
+  /// @kyselyType('manual' | 'email')
+  source     String  @default("manual")
+
+  user_id String
+  user    user   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  created_at DateTime @default(now()) @db.Timestamptz
+  updated_at DateTime @default(now()) @db.Timestamptz
+
+  @@index([user_id], map: "event_user_id_idx")
+  @@index([user_id, title, start_date], map: "event_user_id_title_start_date_idx")
 }
 
 model session {

@@ -602,3 +602,27 @@ a.maplibregl-ctrl-logo::before {
     display: none;
   }
 }
+
+/* Event Calendar (@event-calendar/core) themed with app tokens. The vars
+   reference light/dark custom properties, so .dark flips automatically. */
+.ec {
+  --ec-bg-color: var(--background);
+  --ec-text-color: var(--foreground);
+  --ec-border-color: var(--border);
+  --ec-accent-color: var(--muted);
+  --ec-day-bg-color: var(--background);
+  --ec-button-bg-color: var(--card);
+  --ec-button-border-color: var(--border);
+  --ec-button-text-color: var(--foreground);
+  --ec-button-active-bg-color: var(--accent);
+  --ec-button-active-border-color: var(--border);
+  --ec-button-active-text-color: var(--foreground);
+  --ec-today-bg-color: color-mix(in oklab, var(--primary) 12%, transparent);
+  --ec-highlight-color: color-mix(in oklab, var(--primary) 18%, transparent);
+  --ec-popup-bg-color: var(--popover);
+  --ec-now-indicator-color: var(--destructive);
+  font-family: var(--font-sans);
+}
+.ec .ec-button {
+  border-radius: var(--radius-md);
+}

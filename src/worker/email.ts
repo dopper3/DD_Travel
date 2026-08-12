@@ -75,6 +75,21 @@ interface Extraction {
   hotels: ExtractedHotel[];
 }
 
+interface ExtractedEvent {
+  title: string | null;
+  event_date: string | null;
+  start_time: string | null;
+  end_date: string | null;
+  end_time: string | null;
+  location: string | null;
+  notes: string | null;
+}
+
+interface EventExtraction {
+  contains_events: boolean;
+  events: ExtractedEvent[];
+}
+
 // The structured-outputs compiler caps union-typed parameters (nullable via
 // anyOf) at 16 per schema; with flights + hotels we exceed that. Plain string
 // fields with an empty-string sentinel avoid unions entirely; '' is
@@ -172,6 +187,52 @@ const EXTRACTION_SCHEMA = {
   },
 } as const;
 
+// Same conventions as EXTRACTION_SCHEMA: every leaf is a plain string with an
+// empty-string sentinel (no anyOf/nullable — the structured-outputs compiler
+// caps union-typed parameters at 16).
+const EVENT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['contains_events', 'events'],
+  properties: {
+    contains_events: {
+      type: 'boolean',
+      description:
+        'True only if this email describes one or more concrete calendar events (appointment, reservation, ticket, party, concert, activity, ...).',
+    },
+    events: {
+      type: 'array',
+      description: 'One entry per distinct event. Empty if none.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: [
+          'title',
+          'event_date',
+          'start_time',
+          'end_date',
+          'end_time',
+          'location',
+          'notes',
+        ],
+        properties: {
+          title: str('Short event title, e.g. "Dinner at Canoe"'),
+          event_date: str('Event start date, YYYY-MM-DD'),
+          start_time: str(
+            'Local start time, 24h HH:MM. Empty for all-day events',
+          ),
+          end_date: str('End date if the event spans multiple days, YYYY-MM-DD'),
+          end_time: str('Local end time, 24h HH:MM'),
+          location: str('Venue name and/or address as written'),
+          notes: str(
+            'Confirmation numbers, dress code, or other useful details',
+          ),
+        },
+      },
+    },
+  },
+} as const;
+
 const stripHtml = (html: string) =>
   html
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
@@ -195,6 +256,16 @@ const toInstant = (
   }
   return new TZDate(y!, m! - 1, d!, hh!, mm!, tz);
 };
+
+// The schemas use '' as the unknown-sentinel (see `str` above); restore the
+// null-based shape the importers expect.
+const emptyToNull = <T extends object>(obj: T): T =>
+  Object.fromEntries(
+    Object.entries(obj).map(([key, value]) => [
+      key,
+      typeof value === 'string' && value.trim() === '' ? null : value,
+    ]),
+  ) as T;
 
 const extractTravelData = async (
   env: EmailEnv,
@@ -248,16 +319,6 @@ const extractTravelData = async (
     throw new Error('No text block in extraction response');
   }
   const raw = JSON.parse(text.text) as Extraction;
-
-  // The schema uses '' as the unknown-sentinel (see `str` above); restore
-  // the null-based shape the importers expect.
-  const emptyToNull = <T extends object>(obj: T): T =>
-    Object.fromEntries(
-      Object.entries(obj).map(([key, value]) => [
-        key,
-        typeof value === 'string' && value.trim() === '' ? null : value,
-      ]),
-    ) as T;
 
   return {
     contains_flights: raw.contains_flights,
@@ -429,6 +490,63 @@ const importFlights = async (
   return { imported, skipped };
 };
 
+const extractEventData = async (
+  env: EmailEnv,
+  subject: string,
+  body: string,
+): Promise<EventExtraction> => {
+  const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY });
+
+  const response = await client.messages.create({
+    model: 'claude-opus-4-8',
+    max_tokens: 8192,
+    // Adaptive thinking must be set explicitly on Opus 4.8 (see
+    // extractTravelData).
+    thinking: { type: 'adaptive' },
+    system:
+      'You extract calendar events from emails a person forwards to their ' +
+      'personal travel calendar. The email may be a forwarded invitation, ' +
+      'reservation, ticket, or a short note the person wrote themselves ' +
+      '(e.g. "Dinner with the Smiths Friday 7pm"). ' +
+      'Read the ENTIRE email and identify every distinct event before you ' +
+      'write anything; report each event exactly once. ' +
+      'Dates and times are local to the event venue. ' +
+      'When the email gives a relative date (e.g. "Friday"), resolve it ' +
+      'against the email’s sent date if present, otherwise leave the ' +
+      'date empty. ' +
+      'Whenever you set contains_events to true, the events array MUST ' +
+      'contain one entry per event — never leave it empty. ' +
+      'For emails that contain no concrete event, set contains_events false ' +
+      'and return no entries.',
+    output_config: {
+      format: {
+        type: 'json_schema',
+        schema: EVENT_SCHEMA,
+      },
+    },
+    messages: [
+      {
+        role: 'user',
+        content: `Subject: ${subject}\n\n${body}`,
+      },
+    ],
+  });
+
+  if (response.stop_reason === 'refusal') {
+    throw new Error('Extraction refused by model');
+  }
+  const text = response.content.find((block) => block.type === 'text');
+  if (!text || text.type !== 'text') {
+    throw new Error('No text block in extraction response');
+  }
+  const raw = JSON.parse(text.text) as EventExtraction;
+
+  return {
+    contains_events: raw.contains_events,
+    events: (raw.events ?? []).map(emptyToNull),
+  };
+};
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const importStays = async (
@@ -517,6 +635,57 @@ const importStays = async (
   return { imported, skipped };
 };
 
+const importEvents = async (
+  db: Kysely<DB>,
+  owner: { id: string },
+  events: ExtractedEvent[],
+): Promise<{ imported: string[]; skipped: string[] }> => {
+  const imported: string[] = [];
+  const skipped: string[] = [];
+
+  for (const event of events) {
+    const title = event.title?.trim() ?? null;
+    const startDate = event.event_date;
+    const label = `${title ?? 'Untitled event'}, ${startDate ?? '?'}${event.start_time ? ` ${event.start_time}` : ''}`;
+
+    if (!title || !startDate) {
+      skipped.push(`${label}: missing title or date`);
+      continue;
+    }
+
+    const duplicate = await db
+      .selectFrom('event')
+      .select('id')
+      .where('userId', '=', owner.id)
+      .where('title', '=', title)
+      .where('startDate', '=', startDate)
+      .executeTakeFirst();
+    if (duplicate) {
+      skipped.push(`${label}: already exists (event ${duplicate.id})`);
+      continue;
+    }
+
+    await db
+      .insertInto('event')
+      .values({
+        title,
+        description: event.notes,
+        location: event.location,
+        startDate,
+        startTime: event.start_time,
+        endDate: event.end_date,
+        endTime: event.end_time,
+        source: 'email',
+        userId: owner.id,
+      })
+      .execute();
+
+    imported.push(label);
+  }
+
+  return { imported, skipped };
+};
+
 const loadAllowedSenders = async (db: Kysely<DB>): Promise<string> => {
   const row = await db
     .selectFrom('appConfig')
@@ -597,11 +766,52 @@ export const handleFlightEmail = async (
   const inReplyTo =
     parsed.messageId ?? message.headers.get('message-id') ?? null;
 
+  // Dispatch by recipient: event@/events@ creates calendar events; any other
+  // routed address runs the flight+hotel confirmation flow. Email Routing
+  // invokes the worker once per envelope recipient, so `to` is a single
+  // address.
+  const isEventAddress = ['event', 'events'].includes(
+    message.to.split('@')[0]?.trim().toLowerCase() ?? '',
+  );
+
   let summary: string;
   try {
     const body = parsed.text?.trim() || stripHtml(parsed.html ?? '');
     if (!body) {
       summary = 'Nothing imported: the email body was empty.';
+    } else if (isEventAddress) {
+      let extraction = await extractEventData(env, subject, body);
+      // Same flag/array inconsistency guard as the travel flow.
+      if (extraction.contains_events && !extraction.events.length) {
+        console.log(
+          `Event extraction for "${subject}" inconsistent (flag set, array empty); retrying`,
+        );
+        extraction = await extractEventData(env, subject, body);
+      }
+      console.log(
+        `Event extraction for "${subject}": ${JSON.stringify(extraction)}`,
+      );
+
+      if (!extraction.events.length) {
+        summary =
+          'Nothing imported: no calendar event was found in this email.';
+      } else {
+        const owner = await findOwner(db);
+        const result = await importEvents(db, owner, extraction.events);
+        const lines: string[] = [];
+        if (result.imported.length) {
+          lines.push(`Imported ${result.imported.length} event(s):`);
+          lines.push(...result.imported.map((l) => `  - ${l}`));
+        }
+        if (!result.imported.length && !result.skipped.length) {
+          lines.push('Nothing imported.');
+        }
+        if (result.skipped.length) {
+          lines.push('Skipped:');
+          lines.push(...result.skipped.map((l) => `  - ${l}`));
+        }
+        summary = lines.join('\n');
+      }
     } else {
       let extraction = await extractTravelData(env, subject, body);
       // Occasionally a boolean is set but its array comes back empty; a

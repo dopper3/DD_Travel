@@ -48,12 +48,18 @@ export const emailImportConfigSchema = z.object({
   allowedSenders: z.string().default(''),
 });
 
+export const calendarConfigSchema = z.object({
+  // Secret token for the household iCal feed URL; null until first requested.
+  feedToken: z.string().nullable().default(null),
+});
+
 export const appConfigSchema = z.object({
   oauth: oauthConfigSchema,
   integrations: integrationsConfigSchema,
   map: mapConfigSchema,
   data: dataConfigSchema,
   emailImport: emailImportConfigSchema,
+  calendar: calendarConfigSchema,
 });
 
 export const clientAppConfigSchema = appConfigSchema.extend({
@@ -65,4 +71,5 @@ export const clientAppConfigSchema = appConfigSchema.extend({
   emailImport: appConfigSchema.shape.emailImport.omit({
     allowedSenders: true,
   }),
+  calendar: appConfigSchema.shape.calendar.omit({ feedToken: true }),
 });

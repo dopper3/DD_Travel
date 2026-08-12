@@ -4,6 +4,7 @@ export { default as ListFlightsModal } from '$lib/components/modals/list-flights
 export { default as StatisticsModal } from './statistics/StatisticsModal.svelte';
 export { default as EditFlightModal } from './edit-flight/EditFlightModal.svelte';
 export { default as StayModal } from './stay-form/StayModal.svelte';
+export { default as EventModal } from './event-form/EventModal.svelte';
 export { default as ListStaysModal } from './list-stays/ListStaysModal.svelte';
 export { default as SetupVisitedCountries } from './visited-countries/SetupVisitedCountries.svelte';
 export { default as EditVisitedCountry } from './visited-countries/EditVisitedCountry.svelte';

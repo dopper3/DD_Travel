@@ -3,6 +3,7 @@ import type {
   airline,
   airport,
   api_key,
+  event,
   flight,
   flight_track,
   public_share,
@@ -59,6 +60,9 @@ export type CreateStay = Omit<
   'id' | 'userId' | 'createdAt' | 'updatedAt'
 >;
 export const StaySources = ['manual', 'email'] as const;
+export type Event = Selectable<event>;
+export type EventListItem = Omit<Event, 'createdAt' | 'updatedAt'>;
+export const EventSources = ['manual', 'email'] as const;
 type CreateFlightAirport = Partial<Airport>;
 type CreateFlightEntityReference<T extends { id: number }> = Omit<
   Partial<T>,

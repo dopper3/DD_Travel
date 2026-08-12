@@ -33,6 +33,7 @@ export type SettingsTabId =
   | 'security'
   | 'appearance'
   | 'share'
+  | 'calendar'
   | 'import'
   | 'export'
   | 'data'

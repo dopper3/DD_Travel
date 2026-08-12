@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     BedDouble,
+    CalendarDays,
     ChartColumn,
     GitBranchPlus,
     Grip,
@@ -52,6 +53,12 @@
       openModalsState.statistics = true;
     },
   };
+  const calendarItem = {
+    label: 'Calendar',
+    icon: CalendarDays,
+    testId: 'calendar-button',
+    href: '/calendar',
+  };
   const settingsItem = {
     label: 'Settings',
     icon: Settings,
@@ -92,6 +99,9 @@
         <DockTooltipItem item={listFlightsItem} />
         <DockTooltipItem item={listStaysItem} />
         <DockTooltipItem item={flightsStatisticsItem} />
+      {/if}
+      {#if page.url.pathname !== '/calendar'}
+        <DockTooltipItem item={calendarItem} />
       {/if}
       <DockDropdownItem items={OTHER} label="More">
         <Grip />

@@ -12,3 +12,4 @@ export { default as DataPage } from './data-page/DataPage.svelte';
 export { default as CustomFieldsPage } from './custom-fields-page/CustomFieldsPage.svelte';
 export { default as IntegrationsPage } from './IntegrationsPage.svelte';
 export { default as EmailImportPage } from './EmailImportPage.svelte';
+export { default as CalendarPage } from './CalendarPage.svelte';
