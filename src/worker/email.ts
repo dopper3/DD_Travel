@@ -727,12 +727,24 @@ const sendReply = async (
     return;
   }
   const from = `${localPart}@${domain}`;
+  // Cloudflare validates the thread chain: References must be the incoming
+  // message's own References followed by its Message-ID, or the reply is
+  // refused with "provided References header is invalid". Forwarded mail
+  // usually carries a chain already, so sending just the Message-ID fails.
+  const priorReferences = message.headers
+    .get('references')
+    ?.replace(/\s+/g, ' ')
+    .trim();
+  const references =
+    !priorReferences || priorReferences.endsWith(inReplyTo)
+      ? (priorReferences ?? inReplyTo)
+      : `${priorReferences} ${inReplyTo}`;
   const raw = [
     `From: DD Travel <${from}>`,
     `To: ${message.from}`,
     `Subject: ${/^re:/i.test(subject) ? subject : `Re: ${subject}`}`,
     `In-Reply-To: ${inReplyTo}`,
-    `References: ${inReplyTo}`,
+    `References: ${references}`,
     `Message-ID: <${crypto.randomUUID()}@${domain}>`,
     // RFC 5322 requires Date. mimetext adds it for you; a hand-rolled message
     // does not, and receivers read a missing Date as a spam signal.
