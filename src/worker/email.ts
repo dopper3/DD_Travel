@@ -33,6 +33,12 @@ export interface EmailEnv {
    * var also locks the UI field (config path emailImport.allowedSenders).
    */
   EMAIL_IMPORT_ALLOWED_SENDERS?: string;
+  /**
+   * Zone apex that receipt replies are sent from (e.g. "coldwater.cc").
+   * Cloudflare refuses a reply whose sender domain is a subdomain of the
+   * receiving zone. Falls back to the recipient's own domain when unset.
+   */
+  EMAIL_REPLY_DOMAIN?: string;
 }
 
 const SEAT_CLASSES = [
@@ -701,6 +707,7 @@ const loadAllowedSenders = async (db: Kysely<DB>): Promise<string> => {
 
 const sendReply = async (
   message: ForwardableEmailMessage,
+  env: EmailEnv,
   subject: string,
   inReplyTo: string | null,
   body: string,
@@ -709,21 +716,34 @@ const sendReply = async (
     console.log('Incoming email has no Message-ID; skipping receipt reply');
     return;
   }
-  const domain = message.to.split('@')[1] ?? 'travel.coldwater.cc';
+  const [localPart, receivedDomain] = message.to.split('@');
+  // Cloudflare matches a reply's sender domain against the ZONE that received
+  // the mail, not the address it was sent to: replying as
+  // flights@travel.coldwater.cc is refused with "mail from is not from the
+  // correct domain". EMAIL_REPLY_DOMAIN pins the zone apex.
+  const domain = env.EMAIL_REPLY_DOMAIN?.trim() || receivedDomain;
+  if (!domain) {
+    console.error(`Cannot derive a reply domain from "${message.to}"`);
+    return;
+  }
+  const from = `${localPart}@${domain}`;
   const raw = [
-    `From: DD Travel <${message.to}>`,
+    `From: DD Travel <${from}>`,
     `To: ${message.from}`,
     `Subject: ${/^re:/i.test(subject) ? subject : `Re: ${subject}`}`,
     `In-Reply-To: ${inReplyTo}`,
     `References: ${inReplyTo}`,
     `Message-ID: <${crypto.randomUUID()}@${domain}>`,
+    // RFC 5322 requires Date. mimetext adds it for you; a hand-rolled message
+    // does not, and receivers read a missing Date as a spam signal.
+    `Date: ${new Date().toUTCString().replace(/GMT$/, '+0000')}`,
     'MIME-Version: 1.0',
     'Content-Type: text/plain; charset=utf-8',
     '',
     body,
     '',
   ].join('\r\n');
-  await message.reply(new EmailMessage(message.to, message.from, raw));
+  await message.reply(new EmailMessage(from, message.from, raw));
 };
 
 export const handleFlightEmail = async (
@@ -889,7 +909,7 @@ export const handleFlightEmail = async (
   console.log(`Travel email "${subject}": ${summary.replaceAll('\n', ' | ')}`);
 
   try {
-    await sendReply(message, subject, inReplyTo, summary);
+    await sendReply(message, env, subject, inReplyTo, summary);
   } catch (err) {
     console.error(`Travel email "${subject}": receipt reply failed:`, err);
   }

@@ -31,7 +31,11 @@
     }
   ],
   "vars": {
-    "ORIGIN": "https://travel.coldwater.cc"
+    "ORIGIN": "https://travel.coldwater.cc",
+    // Receipt replies must come from the zone apex: Cloudflare refuses a
+    // reply sent from a subdomain of the zone that received the mail
+    // ("mail from is not from the correct domain").
+    "EMAIL_REPLY_DOMAIN": "coldwater.cc"
     // The email-import sender allowlist is managed in the UI
     // (Settings -> Email Import). To force it via env instead, set
     // EMAIL_IMPORT_ALLOWED_SENDERS here (this also locks the UI field).
