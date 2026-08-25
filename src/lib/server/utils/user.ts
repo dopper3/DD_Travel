@@ -16,6 +16,7 @@ export const toPublicUser = (user: PublicUser): PublicUser => {
     dateFormat,
     weekStartsOn,
     flightTimeDisplay,
+    landingPage,
   } = user;
 
   return {
@@ -31,6 +32,7 @@ export const toPublicUser = (user: PublicUser): PublicUser => {
     dateFormat,
     weekStartsOn,
     flightTimeDisplay,
+    landingPage,
   };
 };
 

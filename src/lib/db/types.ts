@@ -30,6 +30,7 @@ export const publicUserFields = [
   'dateFormat',
   'weekStartsOn',
   'flightTimeDisplay',
+  'landingPage',
 ] as const satisfies readonly (keyof User)[];
 export type PublicUser = Pick<User, (typeof publicUserFields)[number]>;
 export type PageUser = PublicUser & { hasOAuthLinked: boolean };

@@ -9,6 +9,7 @@ export const defaultPreferences: Preferences = {
   dateFormat: 'auto',
   weekStartsOn: 'auto',
   flightTimeDisplay: 'airport',
+  landingPage: 'map',
 };
 
 type UserLike = Partial<Preferences> | null | undefined;
@@ -25,5 +26,6 @@ export function getPreferences(user: UserLike): Preferences {
     weekStartsOn: user.weekStartsOn ?? defaultPreferences.weekStartsOn,
     flightTimeDisplay:
       user.flightTimeDisplay ?? defaultPreferences.flightTimeDisplay,
+    landingPage: user.landingPage ?? defaultPreferences.landingPage,
   };
 }

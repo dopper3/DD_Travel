@@ -6,6 +6,7 @@ import type {
   DateFormat,
   DistanceUnit,
   FlightTimeDisplay,
+  LandingPage,
   PressureUnit,
   TemperatureUnit,
   TimeFormat,
@@ -79,5 +80,18 @@ export const flightTimeDisplayOptions: Option<FlightTimeDisplay>[] = [
     value: 'system',
     label: 'My system timezone',
     description: "Convert all times to your device's timezone",
+  },
+];
+
+export const landingPageOptions: Option<LandingPage>[] = [
+  {
+    value: 'map',
+    label: 'Map',
+    description: 'Open AirTrail on the flight map',
+  },
+  {
+    value: 'calendar',
+    label: 'Calendar',
+    description: 'Open AirTrail on the travel calendar',
   },
 ];

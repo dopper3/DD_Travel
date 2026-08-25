@@ -20,6 +20,19 @@
   headerRight={presetButton}
 >
   <section class="space-y-3">
+    <h4 class="text-sm font-semibold">Navigation</h4>
+    <div class="grid gap-3 sm:grid-cols-2">
+      <PreferenceField field="landingPage" />
+    </div>
+    <p class="text-sm text-muted-foreground">
+      The page AirTrail opens on when you visit it. You can always switch pages
+      from the dock.
+    </p>
+  </section>
+
+  <Separator />
+
+  <section class="space-y-3">
     <h4 class="text-sm font-semibold">Units</h4>
     <div class="grid gap-3 sm:grid-cols-2">
       <PreferenceField field="distanceUnit" />

@@ -307,6 +307,10 @@ export type user = {
      * @kyselyType('airport' | 'utc' | 'system')
      */
     flightTimeDisplay: Generated<'airport' | 'utc' | 'system'>;
+    /**
+     * @kyselyType('map' | 'calendar')
+     */
+    landingPage: Generated<'map' | 'calendar'>;
 };
 export type visited_country = {
     id: Generated<number>;

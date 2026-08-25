@@ -2,11 +2,15 @@ import type { Preferences } from '$lib/zod/user';
 
 export type PresetKey = 'metric' | 'imperial' | 'aviation';
 
+// Presets only cover units and date/time display; navigation preferences
+// like the landing page are never overwritten by applying one.
+export type PresetValues = Omit<Preferences, 'landingPage'>;
+
 export interface Preset {
   key: PresetKey;
   label: string;
   description: string;
-  values: Preferences;
+  values: PresetValues;
 }
 
 const FLIGHT_TIME_DISPLAY_DEFAULT: Preferences['flightTimeDisplay'] = 'airport';
@@ -70,7 +74,7 @@ export const presetList: Preset[] = [
  * Returns the key of the preset that matches the given preferences exactly,
  * or null if none do (i.e. the user has a custom mix).
  */
-export const matchPreset = (prefs: Preferences): PresetKey | null => {
+export const matchPreset = (prefs: PresetValues): PresetKey | null => {
   for (const preset of presetList) {
     const v = preset.values;
     if (

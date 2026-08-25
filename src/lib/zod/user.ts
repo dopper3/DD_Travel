@@ -8,6 +8,7 @@ export const timeFormatSchema = z.enum(['12h', '24h', 'auto']);
 export const dateFormatSchema = z.enum(['iso', 'us', 'eu', 'auto']);
 export const weekStartsOnSchema = z.enum(['mon', 'sun', 'auto']);
 export const flightTimeDisplaySchema = z.enum(['airport', 'utc', 'system']);
+export const landingPageSchema = z.enum(['map', 'calendar']);
 
 export type DistanceUnit = z.infer<typeof distanceUnitSchema>;
 export type WindSpeedUnit = z.infer<typeof windSpeedUnitSchema>;
@@ -17,6 +18,7 @@ export type TimeFormat = z.infer<typeof timeFormatSchema>;
 export type DateFormat = z.infer<typeof dateFormatSchema>;
 export type WeekStartsOn = z.infer<typeof weekStartsOnSchema>;
 export type FlightTimeDisplay = z.infer<typeof flightTimeDisplaySchema>;
+export type LandingPage = z.infer<typeof landingPageSchema>;
 
 export const preferencesSchema = z.object({
   distanceUnit: distanceUnitSchema.default('km'),
@@ -27,6 +29,7 @@ export const preferencesSchema = z.object({
   dateFormat: dateFormatSchema.default('auto'),
   weekStartsOn: weekStartsOnSchema.default('auto'),
   flightTimeDisplay: flightTimeDisplaySchema.default('airport'),
+  landingPage: landingPageSchema.default('map'),
 });
 export type Preferences = z.infer<typeof preferencesSchema>;
 

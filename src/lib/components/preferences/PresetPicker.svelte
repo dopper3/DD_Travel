@@ -10,9 +10,8 @@
     matchPreset,
     presetList,
     type PresetKey,
+    type PresetValues,
   } from '$lib/utils/preferences';
-
-  import type { Preferences } from '$lib/zod/user';
 
   let {
     mode = 'apply',
@@ -28,8 +27,8 @@
      */
     mode?: 'apply' | 'select';
     /** Override the preferences used for the "active" indicator. */
-    current?: Preferences;
-    onApplied?: (key: PresetKey, values: Preferences) => void;
+    current?: PresetValues;
+    onApplied?: (key: PresetKey, values: PresetValues) => void;
   } = $props();
 
   const resolved = $derived(currentOverride ?? getPreferences(page.data.user));
