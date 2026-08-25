@@ -85,6 +85,23 @@ describe('mapToCalendarEvents', () => {
     expect(end.getMinutes()).toBe(45);
   });
 
+  it('clamps a corrupt weeks-long flight span to a short bar', () => {
+    const result = mapToCalendarEvents(
+      {
+        // Arrival mistyped a month after departure.
+        flights: [wireFlight({ arrival: '2026-09-15T18:45:00.000Z' })],
+        stays: [],
+        events: [],
+      },
+      users,
+    );
+    expect(result).toHaveLength(1);
+    const start = result[0]!.start as Date;
+    const end = result[0]!.end as Date;
+    // Falls back to the recorded duration (4h15m).
+    expect(end.getTime() - start.getTime()).toBe(15_300_000);
+  });
+
   it('skips month-precision flights', () => {
     const result = mapToCalendarEvents(
       { flights: [wireFlight({ datePrecision: 'month' })], stays: [], events: [] },

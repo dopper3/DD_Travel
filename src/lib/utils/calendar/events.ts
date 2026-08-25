@@ -11,7 +11,7 @@ export type CalendarStay = {
   userId: string;
 };
 
-export type CalendarItemType = 'flight' | 'stay' | 'event';
+export type CalendarItemType = 'flight' | 'stay' | 'event' | 'location';
 
 export type EcEvent = {
   id: string;
@@ -22,6 +22,9 @@ export type EcEvent = {
   backgroundColor?: string;
   extendedProps: { type: CalendarItemType; id: number };
 };
+
+// Longest nonstop flights are ~19h; anything past 2 days is bad data.
+const MAX_FLIGHT_SPAN_MS = 2 * 86_400_000;
 
 const PERSON_COLORS = ['#3b82f6', '#f59e0b'] as const; // blue-500, amber-500
 const SHARED_COLOR = '#8b5cf6'; // violet-500: a flight both people are on
@@ -73,7 +76,7 @@ const wallTime = (tz: {
     tz.getMinutes(),
   );
 
-const addDays = (day: string, n: number): string => {
+export const addDays = (day: string, n: number): string => {
   const date = new Date(`${day}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + n);
   return date.toISOString().slice(0, 10);
@@ -114,6 +117,17 @@ export const mapToCalendarEvents = (
           flight.duration !== null && flight.duration > 0
             ? new Date(start.getTime() + flight.duration * 1_000)
             : new Date(start.getTime() + 2 * 3_600_000);
+      }
+      // Corrupt-data guard: no airline flight spans days. A mistyped arrival
+      // month would otherwise paint a bar across weeks of the calendar.
+      if (end.getTime() - start.getTime() > MAX_FLIGHT_SPAN_MS) {
+        const sane =
+          flight.duration !== null &&
+          flight.duration > 0 &&
+          flight.duration * 1_000 <= MAX_FLIGHT_SPAN_MS;
+        end = new Date(
+          start.getTime() + (sane ? flight.duration! * 1_000 : 2 * 3_600_000),
+        );
       }
       result.push({ ...base, start, end });
     } else if (timeline.dateStart) {

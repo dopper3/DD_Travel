@@ -15,6 +15,7 @@
     mapToCalendarEvents,
     personColor,
   } from '$lib/utils/calendar/events';
+  import { mapToLocationEvents } from '$lib/utils/calendar/location';
   import { getPreferences, getWeekStartsOn } from '$lib/utils/preferences';
 
   const rawCalendar = trpc.calendar.list.query();
@@ -22,6 +23,11 @@
   const users = $derived(page.data.users ?? []);
   const prefs = $derived(getPreferences(page.data.user));
   const calendarEvents = $derived(data ? mapToCalendarEvents(data, users) : []);
+  const locationEvents = $derived(
+    data && page.data.user
+      ? mapToLocationEvents(data.flights, page.data.user.id)
+      : [],
+  );
 
   let modalOpen = $state(false);
   let editedEvent = $state<EventListItem | null>(null);
@@ -31,6 +37,7 @@
   // getView, ...) but the published component type does not declare it.
   let ecRef = $state<unknown>();
   const ec = $derived(ecRef as Calendar | undefined);
+  let currentView = $state('dayGridMonth');
   let mode = $state<'calendar' | 'year'>('calendar');
   let yearShown = $state(new Date().getFullYear());
 
@@ -76,16 +83,34 @@
       year: { text: 'Year', click: showYear },
     },
     firstDay: getWeekStartsOn(prefs),
-    events: calendarEvents,
+    // Presence bars only make sense in the month grid; in the agenda list
+    // they would repeat on every covered day.
+    events:
+      currentView === 'dayGridMonth'
+        ? [...locationEvents, ...calendarEvents]
+        : calendarEvents,
+    // Keep the presence bars in one merged top row above the day's items.
+    eventOrder: (a: Calendar.Event, b: Calendar.Event) => {
+      const rank = (e: Calendar.Event) =>
+        e.extendedProps?.type === 'location' ? 0 : 1;
+      return (
+        rank(a) - rank(b) ||
+        new Date(a.start).getTime() - new Date(b.start).getTime()
+      );
+    },
+    datesSet: ({ view }: { view: { type: string } }) => {
+      currentView = view.type;
+    },
     // Show every event in the day cell; never collapse into "+N more".
     dayMaxEvents: false,
     height: '100%',
     eventClick: ({ event }: { event: { extendedProps: unknown } }) => {
       const props = event.extendedProps as {
-        type: 'flight' | 'stay' | 'event';
+        type: 'flight' | 'stay' | 'event' | 'location';
         id: number;
       };
-      if (props.type === 'flight') {
+      // A location bar opens the flight that brought you there.
+      if (props.type === 'flight' || props.type === 'location') {
         openFlightDetails(props.id);
         void goto('/');
       } else if (props.type === 'stay') {
