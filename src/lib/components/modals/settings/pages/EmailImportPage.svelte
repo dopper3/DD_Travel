@@ -7,6 +7,7 @@
   import { PageHeader } from '.';
 
   import { invalidateAll } from '$app/navigation';
+  import { page } from '$app/state';
   import { Locked } from '$lib/components/helpers';
   import * as Form from '$lib/components/ui/form';
   import { Input } from '$lib/components/ui/input';
@@ -52,12 +53,24 @@
   });
 
   const changes = $derived($formData.allowedSenders !== savedSenders);
+
+  const mailDomain = $derived(page.url.hostname);
 </script>
 
 <PageHeader
   title="Email Import"
   subtitle="Forward flight confirmation emails to have flights added automatically."
 >
+  <div class="mb-4 rounded-md border bg-muted/40 p-3 text-sm">
+    <p class="font-medium">How to use</p>
+    <p class="text-muted-foreground">
+      Forward a flight or hotel confirmation to
+      <span class="font-mono text-foreground">flights@{mailDomain}</span>
+      from an allowed sender. It is added automatically and you get a reply confirming
+      what was imported. For other calendar events, forward to
+      <span class="font-mono text-foreground">event@{mailDomain}</span>.
+    </p>
+  </div>
   <form
     method="POST"
     action="/api/email-import/config/save"
