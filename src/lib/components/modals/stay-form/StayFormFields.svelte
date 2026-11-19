@@ -1,6 +1,7 @@
 <script lang="ts">
   import { MapPin, Search } from '@o7/icon/lucide';
-  import maplibregl, { type LngLatLike } from 'maplibre-gl';
+  import type * as maplibregl from 'maplibre-gl';
+  import type { LngLatLike } from 'maplibre-gl';
   import { mode } from 'mode-watcher';
   import { onDestroy } from 'svelte';
   import {

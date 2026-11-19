@@ -2,7 +2,7 @@
   import { browser } from '$app/environment';
   import { base } from '$app/paths';
   import { RefreshCw } from '@o7/icon/lucide';
-  import maplibregl from 'maplibre-gl';
+  import type * as maplibregl from 'maplibre-gl';
   import { mode } from 'mode-watcher';
   import { onDestroy } from 'svelte';
   import {
@@ -30,6 +30,7 @@
     getConfiguredAppMapStyleUrl,
   } from '$lib/map/app-style';
   import { registerPmtilesProtocol } from '$lib/map/pmtiles';
+  import { exposeRenderState } from '$lib/map/render-state';
   import { appConfig } from '$lib/state.svelte';
   import { api, trpc } from '$lib/trpc';
   import { pluralize } from '$lib/utils';
@@ -76,6 +77,10 @@
       : 'rgba(0,0,0,0)';
 
   let map: maplibregl.Map | undefined = $state(undefined);
+
+  $effect(() => {
+    if (map) return exposeRenderState(map);
+  });
   let loaded = $state(false);
   const style = $derived(
     getConfiguredAppMapStyleUrl(mode.current, appConfig.config?.map),

@@ -3,7 +3,7 @@ import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
 import { resolve } from '$app/paths';
-import { trpcServer } from '$lib/server/server';
+import { prefetchFlightPageData } from '$lib/server/utils/flight-page';
 
 export const load: PageServerLoad = async (event) => {
   // Honor the user's preferred landing page on full page loads only —
@@ -12,6 +12,5 @@ export const load: PageServerLoad = async (event) => {
     redirect(302, resolve('/calendar'));
   }
 
-  await trpcServer.flight.list.ssr({ scope: 'mine' }, event);
-  await trpcServer.flightTrack.list.ssr({ scope: 'mine' }, event);
+  await prefetchFlightPageData(event);
 };

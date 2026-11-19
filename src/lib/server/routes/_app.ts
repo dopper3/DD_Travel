@@ -17,6 +17,7 @@ import { sqlRouter } from '$lib/server/routes/sql';
 import { stayRouter } from '$lib/server/routes/stay';
 import { visitedCountriesRouter } from '$lib/server/routes/visited-countries';
 import { weatherRouter } from '$lib/server/routes/weather';
+import { roleRouter } from '$lib/server/routes/role';
 
 export const appRouter = router({
   user: userRouter,
@@ -35,6 +36,7 @@ export const appRouter = router({
   visitedCountries: visitedCountriesRouter,
   sql: sqlRouter,
   weather: weatherRouter,
+  role: roleRouter,
 });
 
 export type AppRouter = typeof appRouter;

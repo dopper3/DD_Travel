@@ -1,6 +1,5 @@
-import { error } from '@sveltejs/kit';
-
 import type { RequestHandler } from './$types';
+import { GET as personalFeed } from '../[token]/+server';
 
 import { db } from '$lib/db';
 import { appConfig } from '$lib/server/utils/config';
@@ -10,11 +9,16 @@ import { buildCalendarFeed } from '$lib/server/utils/ics';
 // Unauthenticated: the secret token in the URL is the credential, so phones'
 // calendar apps can subscribe. 404 (not 401) on mismatch to avoid confirming
 // the endpoint exists.
-export const GET: RequestHandler = async ({ params }) => {
+//
+// This route shadows upstream's per-user flight feed (../[token], which also
+// serves <token>.ics URLs), so any token that is not the shared household one
+// is handed on to it.
+export const GET: RequestHandler = async (event) => {
+  const { params } = event;
   const config = await appConfig.get();
   const token = config?.calendar.feedToken;
   if (!token || params.token !== token) {
-    error(404, 'Not found');
+    return personalFeed(event as never);
   }
 
   const [flights, stays, events, users] = await Promise.all([

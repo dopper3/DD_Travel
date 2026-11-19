@@ -1,37 +1,37 @@
-'use client';
+"use client";
 
-import { Card, Cards } from 'fumadocs-ui/components/card';
+import { Card, Cards } from "fumadocs-ui/components/card";
 import {
   ChartPie,
   CloudDownload,
   Globe,
   History,
-  Map,
+  Map as MapIcon,
   Moon,
   Plane,
   Shield,
   TabletSmartphone,
   Users,
-} from 'lucide-react';
-import Link from 'next/link';
-import posthog from 'posthog-js';
-import type React from 'react';
-import Aurora from '@/components/Aurora';
+} from "lucide-react";
+import Link from "next/link";
+import posthog from "posthog-js";
+import type React from "react";
+import Aurora from "@/components/aurora";
 import {
-  FlightPath,
-  InstallCommand,
   CopyableUrl,
   FadeInOnScroll,
-  PreviewImage,
+  FlightPath,
   HeroImage,
-} from './page.client';
+  InstallCommand,
+  PreviewImage,
+} from "./page.client";
 
 export default function HomePage() {
   return (
     <div className="landing-page">
       {/* ── Hero Section ── */}
       <section className="hero-wrapper relative mb-16 lg:mb-24">
-        <div className="hero-container relative flex min-h-[560px] items-end rounded-2xl border bg-fd-card md:min-h-[640px] lg:min-h-[700px]">
+        <div className="hero-container bg-fd-card relative flex min-h-[560px] items-end rounded-2xl border md:min-h-[640px] lg:min-h-[700px]">
           <FlightPath className="pointer-events-none z-[1] opacity-60 dark:opacity-40" />
 
           {/* Subtle grid overlay */}
@@ -39,41 +39,41 @@ export default function HomePage() {
 
           {/* Content -- constrained to left half on lg+ to avoid overlapping the image */}
           <div className="relative z-[2] flex w-full flex-col p-6 md:p-10 lg:w-[50%] lg:p-14">
-            <p className="landing-pill mb-6 w-fit rounded-full border border-fd-primary/30 px-3 py-1.5 font-medium text-fd-primary text-xs tracking-wide">
+            <p className="landing-pill border-fd-primary/30 text-fd-primary mb-6 w-fit rounded-full border px-3 py-1.5 text-xs font-medium tracking-wide">
               Open-source flight tracker
             </p>
-            <h1 className="mb-4 font-semibold text-3xl leading-[1.1] tracking-tight md:text-5xl xl:text-6xl">
+            <h1 className="mb-4 text-3xl leading-[1.1] font-semibold tracking-tight md:text-5xl xl:text-6xl">
               Your flights.
               <br />
               Your <span className="text-fd-primary">story</span>.
             </h1>
-            <p className="mb-8 text-fd-muted-foreground text-sm leading-relaxed md:text-base">
+            <p className="text-fd-muted-foreground mb-8 text-sm leading-relaxed md:text-base">
               A modern, self-hosted personal flight tracking system. Map every
               journey, analyze your travel patterns, and own your data.
             </p>
             <div className="flex flex-col gap-3 sm:flex-row">
               <Link
-                className="landing-btn-primary inline-flex h-11 items-center justify-center rounded-full bg-fd-primary px-6 font-medium text-sm text-white tracking-tight transition-all hover:brightness-110 hover:shadow-lg hover:shadow-fd-primary/25"
+                className="landing-btn-primary bg-fd-primary hover:shadow-fd-primary/25 inline-flex h-11 items-center justify-center rounded-full px-6 text-sm font-medium tracking-tight text-white transition-all hover:shadow-lg hover:brightness-110"
                 href="/docs/overview/introduction"
                 onClick={() =>
-                  posthog.capture('cta_clicked', {
-                    cta_type: 'get_started',
-                    location: 'homepage_hero',
+                  posthog.capture("cta_clicked", {
+                    cta_type: "get_started",
+                    location: "homepage_hero",
                   })
                 }
               >
                 Get Started
               </Link>
               <Link
-                className="inline-flex h-11 items-center justify-center rounded-full border bg-fd-secondary px-6 font-medium text-fd-secondary-foreground text-sm tracking-tight transition-colors hover:bg-fd-accent"
+                className="bg-fd-secondary text-fd-secondary-foreground hover:bg-fd-accent inline-flex h-11 items-center justify-center rounded-full border px-6 text-sm font-medium tracking-tight transition-colors"
                 href="https://demo.airtrail.johan.ohly.dk"
-                rel="noopener noreferrer"
-                target="_blank"
                 onClick={() =>
-                  posthog.capture('demo_link_clicked', {
-                    location: 'homepage_hero',
+                  posthog.capture("demo_link_clicked", {
+                    location: "homepage_hero",
                   })
                 }
+                rel="noopener noreferrer"
+                target="_blank"
               >
                 Live Demo
               </Link>
@@ -92,15 +92,15 @@ export default function HomePage() {
 
       {/* ── Intro Text ── */}
       <section className="mt-16 md:mt-24">
-        <p className="mx-auto max-w-3xl text-center font-light text-xl leading-snug tracking-tight md:text-2xl xl:text-3xl">
-          AirTrail gives you a{' '}
-          <span className="font-medium text-fd-primary">
+        <p className="mx-auto max-w-3xl text-center text-xl leading-snug font-light tracking-tight md:text-2xl xl:text-3xl">
+          AirTrail gives you a{" "}
+          <span className="text-fd-primary font-medium">
             beautiful world map
-          </span>{' '}
-          of every flight you&apos;ve taken, detailed{' '}
-          <span className="font-medium text-fd-primary">statistics</span>, and
-          full control over{' '}
-          <span className="font-medium text-fd-primary">your data</span> &mdash;
+          </span>{" "}
+          of every flight you&apos;ve taken, detailed{" "}
+          <span className="text-fd-primary font-medium">statistics</span>, and
+          full control over{" "}
+          <span className="text-fd-primary font-medium">your data</span> &mdash;
           all self-hosted with Docker.
         </p>
       </section>
@@ -108,10 +108,10 @@ export default function HomePage() {
       {/* ── Features Grid ── */}
       <section className="mt-16 md:mt-24">
         <FadeInOnScroll>
-          <h2 className="mb-2 text-center font-medium text-2xl tracking-tight text-fd-primary lg:text-3xl">
+          <h2 className="text-fd-primary mb-2 text-center text-2xl font-medium tracking-tight lg:text-3xl">
             Everything you need.
           </h2>
-          <p className="mb-8 text-center text-fd-muted-foreground text-sm lg:mb-16">
+          <p className="text-fd-muted-foreground mb-8 text-center text-sm lg:mb-16">
             Built for aviation enthusiasts who care about their data.
           </p>
         </FadeInOnScroll>
@@ -121,25 +121,25 @@ export default function HomePage() {
           <div className="flex flex-col gap-5 lg:-translate-y-8">
             <FadeInOnScroll>
               <FeatureCard
-                icon={<Map className="size-5" />}
-                title="Interactive World Map"
                 description="Visualize every flight on an interactive globe. See your routes, airports, and travel patterns come alive."
+                icon={<MapIcon className="size-5" />}
+                title="Interactive World Map"
               />
             </FadeInOnScroll>
 
             <FadeInOnScroll delay={150}>
               <FeatureCard
+                description="Bring in flights from MyFlightRadar24, App in the Air, JetLog, TripIt, Flighty, byAir, JetLovers, OpenFlights, and more."
                 icon={<CloudDownload className="size-5" />}
                 title="Import From Anywhere"
-                description="Bring in flights from MyFlightRadar24, App in the Air, JetLog, TripIt, Flighty, byAir, JetLovers, OpenFlights, and more."
               />
             </FadeInOnScroll>
 
             <FadeInOnScroll delay={200}>
               <FeatureCard
+                description="Every departure, every arrival. Searchable, filterable, and always at your fingertips."
                 icon={<History className="size-5" />}
                 title="Complete Flight History"
-                description="Every departure, every arrival. Searchable, filterable, and always at your fingertips."
               />
             </FadeInOnScroll>
           </div>
@@ -148,25 +148,25 @@ export default function HomePage() {
           <div className="flex flex-col gap-5">
             <FadeInOnScroll delay={100}>
               <FeatureCard
+                description="Distance traveled, time in the air, airports visited, airline breakdowns -- deep insights into your flying history."
                 icon={<ChartPie className="size-5" />}
                 title="Rich Statistics"
-                description="Distance traveled, time in the air, airports visited, airline breakdowns -- deep insights into your flying history."
               />
             </FadeInOnScroll>
 
             <FadeInOnScroll delay={250}>
               <FeatureCard
+                description="Multiple users, shared flights, built-in authentication and OAuth support to secure your data."
                 icon={<Users className="size-5" />}
                 title="Multi-User & Auth"
-                description="Multiple users, shared flights, built-in authentication and OAuth support to secure your data."
               />
             </FadeInOnScroll>
 
             <FadeInOnScroll delay={300}>
               <FeatureCard
+                description="Easy on the eyes at any hour. Automatically adapts or lets you choose your preferred theme."
                 icon={<Moon className="size-5" />}
                 title="Light & Dark Modes"
-                description="Easy on the eyes at any hour. Automatically adapts or lets you choose your preferred theme."
               />
             </FadeInOnScroll>
           </div>
@@ -175,29 +175,29 @@ export default function HomePage() {
 
       {/* ── Aurora Divider ── */}
       <section className="relative mt-16 md:mt-24">
-        <div className="aurora-section relative overflow-hidden rounded-2xl border bg-fd-card">
+        <div className="aurora-section bg-fd-card relative overflow-hidden rounded-2xl border">
           <Aurora bands={30} />
           <div className="relative z-10 flex flex-col items-center px-6 py-20 text-center md:py-28">
-            <Plane className="mb-4 size-8 text-fd-primary" />
-            <h2 className="mb-3 font-semibold text-2xl tracking-tight md:text-3xl">
+            <Plane className="text-fd-primary mb-4 size-8" />
+            <h2 className="mb-3 text-2xl font-semibold tracking-tight md:text-3xl">
               Self-hosted. Privacy-first.
             </h2>
-            <p className="max-w-lg text-fd-muted-foreground text-sm leading-relaxed md:text-base">
+            <p className="text-fd-muted-foreground max-w-lg text-sm leading-relaxed md:text-base">
               Your flight data stays on your server. No third-party tracking, no
               vendor lock-in. Deploy with Docker in minutes and own everything.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link
-                className="inline-flex h-10 items-center justify-center rounded-full bg-fd-primary px-5 font-medium text-sm text-white tracking-tight transition-all hover:brightness-110"
+                className="bg-fd-primary inline-flex h-10 items-center justify-center rounded-full px-5 text-sm font-medium tracking-tight text-white transition-all hover:brightness-110"
                 href="/docs/overview/quick-start"
               >
                 Quick Start Guide
               </Link>
               <Link
-                className="inline-flex h-10 items-center justify-center rounded-full border bg-fd-secondary px-5 font-medium text-fd-secondary-foreground text-sm tracking-tight transition-colors hover:bg-fd-accent"
+                className="bg-fd-secondary text-fd-secondary-foreground hover:bg-fd-accent inline-flex h-10 items-center justify-center rounded-full border px-5 text-sm font-medium tracking-tight transition-colors"
                 href="https://github.com/JohanOhly/AirTrail"
-                target="_blank"
                 rel="noopener noreferrer"
+                target="_blank"
               >
                 View on GitHub
               </Link>
@@ -210,10 +210,10 @@ export default function HomePage() {
       <section className="mt-16 grid grid-cols-1 gap-5 md:mt-24 lg:grid-cols-2">
         <div className="col-span-full">
           <FadeInOnScroll>
-            <h2 className="mb-2 text-center font-medium text-2xl tracking-tight text-fd-primary lg:text-3xl">
+            <h2 className="text-fd-primary mb-2 text-center text-2xl font-medium tracking-tight lg:text-3xl">
               Up and running in seconds.
             </h2>
-            <p className="mb-6 text-center text-fd-muted-foreground text-sm">
+            <p className="text-fd-muted-foreground mb-6 text-center text-sm">
               One command. That&apos;s all it takes.
             </p>
           </FadeInOnScroll>
@@ -221,21 +221,21 @@ export default function HomePage() {
 
         <div className="col-span-full">
           <FadeInOnScroll>
-            <div className="rounded-2xl border bg-fd-card p-6 shadow-lg md:p-8">
+            <div className="bg-fd-card rounded-2xl border p-6 shadow-lg md:p-8">
               <div className="mb-4 flex items-center gap-2">
-                <div className="flex size-8 items-center justify-center rounded-lg bg-fd-primary/10 text-fd-primary">
+                <div className="bg-fd-primary/10 text-fd-primary flex size-8 items-center justify-center rounded-lg">
                   <Globe className="size-4" />
                 </div>
-                <span className="font-medium text-sm">
+                <span className="text-sm font-medium">
                   Run the installation script
                 </span>
               </div>
-              <p className="mb-1 text-fd-muted-foreground text-xs">
+              <p className="text-fd-muted-foreground mb-1 text-xs">
                 Works on Linux systems with Docker preinstalled.
               </p>
               <InstallCommand />
-              <p className="mt-4 text-fd-muted-foreground text-xs">
-                After installation, AirTrail will be available at{' '}
+              <p className="text-fd-muted-foreground mt-4 text-xs">
+                After installation, AirTrail will be available at{" "}
                 <CopyableUrl url="http://localhost:3000" />
               </p>
             </div>
@@ -243,14 +243,14 @@ export default function HomePage() {
         </div>
 
         <FadeInOnScroll delay={100}>
-          <div className="landing-card flex h-full flex-col rounded-2xl border bg-fd-card p-6 shadow-lg">
+          <div className="landing-card bg-fd-card flex h-full flex-col rounded-2xl border p-6 shadow-lg">
             <div className="mb-3 flex items-center gap-2">
-              <div className="flex size-7 items-center justify-center rounded-md bg-fd-primary/10 text-fd-primary">
+              <div className="bg-fd-primary/10 text-fd-primary flex size-7 items-center justify-center rounded-md">
                 <Shield className="size-4" />
               </div>
-              <span className="font-medium text-sm">Post-Installation</span>
+              <span className="text-sm font-medium">Post-Installation</span>
             </div>
-            <p className="mb-4 text-fd-muted-foreground text-xs leading-relaxed">
+            <p className="text-fd-muted-foreground mb-4 text-xs leading-relaxed">
               Set up authentication, configure your instance, and start adding
               flights.
             </p>
@@ -264,16 +264,16 @@ export default function HomePage() {
         </FadeInOnScroll>
 
         <FadeInOnScroll delay={200}>
-          <div className="landing-card flex h-full flex-col rounded-2xl border bg-fd-card p-6 shadow-lg">
+          <div className="landing-card bg-fd-card flex h-full flex-col rounded-2xl border p-6 shadow-lg">
             <div className="mb-3 flex items-center gap-2">
-              <div className="flex size-7 items-center justify-center rounded-md bg-fd-primary/10 text-fd-primary">
+              <div className="bg-fd-primary/10 text-fd-primary flex size-7 items-center justify-center rounded-md">
                 <TabletSmartphone className="size-4" />
               </div>
-              <span className="font-medium text-sm">
+              <span className="text-sm font-medium">
                 Alternative Installation
               </span>
             </div>
-            <p className="mb-4 text-fd-muted-foreground text-xs leading-relaxed">
+            <p className="text-fd-muted-foreground mb-4 text-xs leading-relaxed">
               Prefer Docker Compose or need a custom setup? We have guides for
               every scenario.
             </p>
@@ -300,20 +300,20 @@ export default function HomePage() {
 
 // ── Feature Card Component ──
 
-type FeatureCardProps = {
+interface FeatureCardProps {
+  description: string;
   icon: React.ReactNode;
   title: string;
-  description: string;
-};
+}
 
 function FeatureCard({ icon, title, description }: Readonly<FeatureCardProps>) {
   return (
-    <div className="landing-card flex flex-col rounded-2xl border bg-fd-card p-6 shadow-lg transition-shadow hover:shadow-xl">
+    <div className="landing-card bg-fd-card flex flex-col rounded-2xl border p-6 shadow-lg transition-shadow hover:shadow-xl">
       <div className="mb-4 flex items-center gap-3">
-        <div className="flex size-9 items-center justify-center rounded-lg bg-fd-primary/10 text-fd-primary">
+        <div className="bg-fd-primary/10 text-fd-primary flex size-9 items-center justify-center rounded-lg">
           {icon}
         </div>
-        <h3 className="font-medium text-base tracking-tight">{title}</h3>
+        <h3 className="text-base font-medium tracking-tight">{title}</h3>
       </div>
       <p className="text-fd-muted-foreground text-sm leading-relaxed">
         {description}

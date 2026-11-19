@@ -95,6 +95,14 @@ const passengerIdentity = (passenger: {
     ? `user:${passenger.userId}`
     : `guest:${passenger.guestName}`;
 
+/** A submitted passenger list that cannot be matched to the stored one. */
+export class PassengerResolutionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PassengerResolutionError';
+  }
+}
+
 export const resolveFlightPassengerChanges = (
   existingPassengers: ExistingPassengerIdentity[],
   incomingPassengers: CreateFlightPassenger[],
@@ -114,10 +122,14 @@ export const resolveFlightPassengerChanges = (
       ? byId.get(passenger.id)
       : byIdentity.get(passengerIdentity(passenger));
     if (passenger.id && !existing) {
-      throw new Error('Passenger does not belong to this flight');
+      throw new PassengerResolutionError(
+        'Passenger does not belong to this flight',
+      );
     }
     if (existing && retainedIds.has(existing.id)) {
-      throw new Error('Passenger record appears more than once');
+      throw new PassengerResolutionError(
+        'Passenger record appears more than once',
+      );
     }
     if (existing) retainedIds.add(existing.id);
     return { passenger, existing };
@@ -191,6 +203,49 @@ export const listFlightPrimitive = async (db: Kysely<DB>, userId: string) => {
 
 export const listAllFlightsPrimitive = async (db: Kysely<DB>) => {
   return await listFlightBaseQuery(db).execute();
+};
+
+export const listGuestNamesPrimitive = async (
+  db: Kysely<DB>,
+  userId: string,
+) => {
+  const guestName = sql.ref<string>('guest.guestName');
+  // Case and whitespace variants count as one guest, shown with their most
+  // used spelling. SQLite has no mode() aggregate, so the query groups by
+  // exact spelling and the variants are folded together below.
+  const spellings = await db
+    .selectFrom('flightPassenger as guest')
+    .select([
+      sql<string>`trim(${guestName})`.as('name'),
+      (eb) => eb.fn.count<string>('guest.flightId').distinct().as('count'),
+    ])
+    .where('guest.guestName', 'is not', null)
+    .where((eb) =>
+      eb.exists(
+        eb
+          .selectFrom('flightPassenger as owner')
+          .select('owner.id')
+          .whereRef('owner.flightId', '=', 'guest.flightId')
+          .where('owner.userId', '=', userId),
+      ),
+    )
+    .groupBy(sql`trim(${guestName})`)
+    .orderBy('count', 'desc')
+    .orderBy('name')
+    .execute();
+
+  // Rows arrive most-used first, so the first spelling seen per guest wins.
+  const guests = new Map<string, { name: string; count: number }>();
+  for (const { name, count } of spellings) {
+    const key = name.toLowerCase();
+    const guest = guests.get(key);
+    if (guest) guest.count += Number(count);
+    else guests.set(key, { name, count: Number(count) });
+  }
+
+  return [...guests.values()].sort(
+    (a, b) => b.count - a.count || a.name.localeCompare(b.name),
+  );
 };
 
 export const getFlightPrimitive = async (db: Kysely<DB>, id: number) => {

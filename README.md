@@ -36,7 +36,7 @@
   integrate with your OAuth provider.
 - **Responsive Design**: Use the application on any device with a responsive design.
 - **Dark Mode**: Switch between light and dark mode.
-- **Import Flights**: Import flights from various sources including MyFlightRadar24, App in the Air, JetLog, TripIt, Flighty, byAir, JetLovers and OpenFlights.
+- **Import Flights**: Import flights from various sources including MyFlightRadar24, App in the Air, JetLog, TripIt, Flighty, byAir, JetLovers, OpenFlights and LogMyTrip.
 
 ## 🚀 Getting Started
 
@@ -78,11 +78,11 @@ If you find an issue, please report it on the [issue tracker](https://github.com
 
 ## Star History
 
-<a href="https://star-history.com/#johanohly/AirTrail&Date">
+<a href="https://www.star-history.com/?repos=johanohly%2Fairtrail&type=timeline&releases&legend=bottom-right">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=johanohly/AirTrail&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=johanohly/AirTrail&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=johanohly/AirTrail&type=Date" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=johanohly/airtrail&type=date&theme=dark&legend=bottom-right" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=johanohly/airtrail&type=date&legend=bottom-right" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=johanohly/airtrail&type=date&legend=bottom-right" />
  </picture>
 </a>
 

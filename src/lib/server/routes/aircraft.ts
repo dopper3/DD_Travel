@@ -1,12 +1,13 @@
 import { z } from 'zod';
 
 import { db } from '$lib/db';
-import { adminProcedure, authedProcedure, router } from '$lib/server/trpc';
+import { authedProcedure, permissionProcedure, router } from '$lib/server/trpc';
 import {
   getAircraft,
   getAircraftByIcao,
   getAircraftByName,
 } from '$lib/server/utils/aircraft';
+import { getAircraftPhoto } from '$lib/server/utils/aircraft-photos';
 import { syncAircraft } from '$lib/server/utils/sync';
 
 export const aircraftRouter = router({
@@ -19,6 +20,11 @@ export const aircraftRouter = router({
   getByName: authedProcedure.input(z.string()).query(async ({ input }) => {
     return await getAircraftByName(input);
   }),
+  getPhoto: authedProcedure
+    .input(z.string().max(64))
+    .query(async ({ input }) => {
+      return await getAircraftPhoto(input);
+    }),
   list: authedProcedure.query(async () => {
     return await db
       .selectFrom('aircraft')
@@ -26,14 +32,16 @@ export const aircraftRouter = router({
       .orderBy('name')
       .execute();
   }),
-  delete: adminProcedure.input(z.number()).mutation(async ({ input }) => {
-    const result = await db
-      .deleteFrom('aircraft')
-      .where('id', '=', input)
-      .execute();
-    return result.length > 0;
-  }),
-  sync: adminProcedure
+  delete: permissionProcedure('data.aircraft.manage')
+    .input(z.number())
+    .mutation(async ({ input }) => {
+      const result = await db
+        .deleteFrom('aircraft')
+        .where('id', '=', input)
+        .execute();
+      return result.length > 0;
+    }),
+  sync: permissionProcedure('data.aircraft.manage')
     .input(z.object({ overwrite: z.boolean().optional() }))
     .mutation(async ({ input }) => {
       return await syncAircraft(input);

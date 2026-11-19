@@ -2,14 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { processFR24File } from './fr24';
 
-const { getAirportByIcao, getAirlineByIcao, getAircraftByIcao } = vi.hoisted(
+const { getAirportByIcao, getAirlineByCodes, getAircraftByIcao } = vi.hoisted(
   () => ({
     getAirportByIcao: vi.fn(async (icao: string) => ({
       id: icao,
       icao,
       tz: 'UTC',
     })),
-    getAirlineByIcao: vi.fn(
+    getAirlineByCodes: vi.fn(
       async (icao: string): Promise<{ id: string; icao: string } | null> => ({
         id: icao,
         icao,
@@ -39,7 +39,7 @@ vi.mock('$lib/utils/data/airports/cache', () => ({
 }));
 
 vi.mock('$lib/utils/data/airlines', () => ({
-  getAirlineByIcao,
+  getAirlineByCodes,
 }));
 
 vi.mock('$lib/utils/data/aircraft', () => ({
@@ -150,7 +150,7 @@ describe('processFR24File', () => {
     });
 
     expect(result.flights).toHaveLength(1);
-    expect(getAirlineByIcao).toHaveBeenCalledWith('LFH');
+    expect(getAirlineByCodes).toHaveBeenCalledWith('LFH', null, 'Inselflieger');
   });
 
   it('derives the arrival from the duration when the arrival time is the 00:00:00 placeholder', async () => {
@@ -199,7 +199,7 @@ describe('processFR24File', () => {
 
   it('reports and applies mappings for defunct airline codes', async () => {
     const content = `Date,Flight number,From,To,Dep time,Arr time,Duration,Airline,Aircraft,Registration,Seat number,Seat type,Flight class,Flight reason,Note\n1999-07-15,NW687,Minneapolis (MSP/KMSP),Seattle (SEA/KSEA),10:00:00,11:30:00,03:30:00,Northwest Airlines (NW/NWA),Boeing 757-200 (B752),N687NW,12A,1,1,1,Issue 687 unknown airline test`;
-    getAirlineByIcao.mockResolvedValueOnce(null);
+    getAirlineByCodes.mockResolvedValueOnce(null);
 
     const unresolved = await processFR24File(content, {
       filterOwner: false,
@@ -208,7 +208,9 @@ describe('processFR24File', () => {
     });
 
     expect(unresolved.flights[0]?.airline).toBeNull();
-    expect(unresolved.unknowns.airlines).toEqual({ NWA: [0] });
+    expect(unresolved.unknowns.airlines).toEqual({
+      'Northwest Airlines (NW/NWA)': [0],
+    });
 
     const northwest = {
       id: 687,
@@ -222,11 +224,25 @@ describe('processFR24File', () => {
       filterOwner: false,
       airlineFromFlightNumber: true,
       importMode: 'personal',
-      airlineMapping: { NWA: northwest },
+      airlineMapping: { 'Northwest Airlines (NW/NWA)': northwest },
     });
 
     expect(resolved.flights[0]?.airline).toEqual(northwest);
     expect(resolved.unknowns.airlines).toEqual({});
+  });
+
+  it('matches airlines by both IATA and ICAO code', async () => {
+    const content = `Date,Flight number,From,To,Dep time,Arr time,Duration,Airline,Aircraft,Registration,Seat number,Seat type,Flight class,Flight reason,Note\n2016-05-01,AB8565,Zurich (ZRH/LSZH),Berlin / Tegel (TXL/EDDT),07:00:00,08:25:00,01:25:00,Air Berlin (AB/BER),Airbus A320 (A320),,,1,1,2,`;
+    getAirlineByCodes.mockResolvedValueOnce(null);
+
+    const result = await processFR24File(content, {
+      filterOwner: false,
+      airlineFromFlightNumber: true,
+      importMode: 'personal',
+    });
+
+    expect(getAirlineByCodes).toHaveBeenCalledWith('BER', 'AB', 'Air Berlin');
+    expect(result.unknowns.airlines).toEqual({ 'Air Berlin (AB/BER)': [0] });
   });
 
   it('counts rows with unparseable airport cells as skipped', async () => {

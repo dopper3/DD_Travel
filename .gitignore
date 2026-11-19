@@ -108,3 +108,5 @@ prisma/temp.sql
 
 # Personal flight data - never push to public fork
 flight-data/
+# Raw screenshot captures
+/tests/screenshots/.output

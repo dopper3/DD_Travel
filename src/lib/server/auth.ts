@@ -43,9 +43,17 @@ export const lucia = new Lucia(adapter, {
       username: db.username,
       // @ts-expect-error - Lucia reads raw rows so the camel case translation layer does not get applied here
       displayName: db.display_name,
-      role: db.role,
+      // @ts-expect-error - Lucia reads snake_case columns without Kysely's mapper
+      roleId: db.role_id,
+      // D1 returns raw SQLite rows here, so booleans arrive as 0/1.
+      // @ts-expect-error - Same as above
+      isOwner: Boolean(db.is_owner),
+      // @ts-expect-error - Same as above
+      roleAssignmentSource: db.role_assignment_source,
       // @ts-expect-error - Same as above
       oauthId: db.oauth_id,
+      // The hash stays out of the session user; only its presence matters.
+      hasPassword: db.password !== null,
       // @ts-expect-error - Same as above
       distanceUnit: db.distance_unit,
       // @ts-expect-error - Same as above

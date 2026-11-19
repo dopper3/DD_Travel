@@ -12,6 +12,10 @@
 
   import { page } from '$app/state';
   import {
+    canDeduplicateOwnFlights,
+    hasClientPermission,
+  } from '$lib/authorization/permissions';
+  import {
     Dock,
     DockDropdownItem,
     DockFloatingItem,
@@ -20,6 +24,9 @@
   import { Separator } from '$lib/components/ui/separator';
   import { openModalsState } from '$lib/state.svelte';
   import { flyAndScale } from '$lib/utils';
+  import { currentPathname } from '$lib/utils/location-path.svelte';
+
+  const pathname = $derived(currentPathname());
 
   const addFlightItem = {
     label: 'Add flight',
@@ -69,16 +76,19 @@
     },
   };
 
-  const OTHER = [
-    {
-      label: 'Tools',
-      href: '/tools',
-    },
-    {
-      label: 'Visited countries',
-      href: '/visited-countries',
-    },
-  ];
+  const otherItems = $derived.by(() => {
+    const items = [];
+    if (
+      canDeduplicateOwnFlights(page.data.authorization) ||
+      hasClientPermission(page.data.authorization, 'tools.sql.execute')
+    ) {
+      items.push({ label: 'Tools', href: '/tools' });
+    }
+    if (hasClientPermission(page.data.authorization, 'flight.read.own')) {
+      items.push({ label: 'Visited countries', href: '/visited-countries' });
+    }
+    return items;
+  });
 </script>
 
 <nav
@@ -86,7 +96,7 @@
   class="z-10 absolute bottom-6 left-1/2 translate-x-[-50%]"
 >
   <div class="flex gap-4">
-    {#if page.url.pathname !== '/'}
+    {#if pathname !== '/'}
       <div transition:flyAndScale>
         <DockFloatingItem href="/" label="Home">
           <Map />
@@ -94,18 +104,22 @@
       </div>
     {/if}
     <Dock>
-      <DockTooltipItem item={addFlightItem} />
-      {#if page.url.pathname === '/'}
+      {#if hasClientPermission(page.data.authorization, 'flight.create.own')}
+        <DockTooltipItem item={addFlightItem} />
+      {/if}
+      {#if pathname === '/' && hasClientPermission(page.data.authorization, 'flight.read.own')}
         <DockTooltipItem item={listFlightsItem} />
         <DockTooltipItem item={listStaysItem} />
         <DockTooltipItem item={flightsStatisticsItem} />
       {/if}
-      {#if page.url.pathname !== '/calendar'}
+      {#if pathname !== '/calendar'}
         <DockTooltipItem item={calendarItem} />
       {/if}
-      <DockDropdownItem items={OTHER} label="More">
-        <Grip />
-      </DockDropdownItem>
+      {#if otherItems.length > 0}
+        <DockDropdownItem items={otherItems} label="More">
+          <Grip />
+        </DockDropdownItem>
+      {/if}
       <Separator orientation="vertical" class="h-full w-px" />
       <DockTooltipItem item={settingsItem} />
     </Dock>

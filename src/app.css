@@ -4,6 +4,7 @@ layer(base);
 @import 'tailwindcss';
 @import './typeset.css';
 @import 'tw-animate-css';
+@import './lib/components/ui/drawer/drawer.css';
 
 .typeset-docs {
   --typeset-font-body: var(--font-sans);
@@ -283,6 +284,16 @@ layer(base);
 
 .maplibregl-popup-tip {
   @apply border-none!;
+}
+
+/*
+ * Hover popups are read-only. svelte-maplibre disables pointer events on the
+ * popup, but MapLibre re-enables them on the content, and svelte-maplibre then
+ * keeps the popup open while the pointer is over it. The popup would stick and
+ * cover controls, like the filter popover, that the user is reaching for.
+ */
+.map-hover-popup .maplibregl-popup-content {
+  pointer-events: none;
 }
 
 :root {

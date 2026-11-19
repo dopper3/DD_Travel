@@ -1,5 +1,7 @@
 import { gpx, kml } from '@tmcw/togeojson';
 
+import { extractKmlMetadata, type TrackMetadata } from './metadata';
+
 import {
   type FlightTrackCoordinate,
   type FlightTrackInput,
@@ -21,6 +23,7 @@ export type ParsedTrackCandidate = {
   endTime: number | null;
   startCoordinate: FlightTrackCoordinate;
   endCoordinate: FlightTrackCoordinate;
+  metadata?: TrackMetadata | null;
 };
 
 type RawTrack = {
@@ -68,9 +71,17 @@ export const parseTrackCandidates = (
     return parseReadsbTrackCandidates(content, sourceName);
   }
 
-  return [
-    toTrackCandidate(parseTrackContent(content, sourceFormat, sourceName)),
-  ];
+  const candidate = toTrackCandidate(
+    parseTrackContent(content, sourceFormat, sourceName),
+  );
+  if (sourceFormat === 'kml') {
+    const document = new DOMParser().parseFromString(
+      content,
+      'application/xml',
+    );
+    candidate.metadata = extractKmlMetadata(document);
+  }
+  return [candidate];
 };
 
 export const parseTrackContent = (
@@ -349,7 +360,12 @@ const normalizeCoordinate = (input: unknown): FlightTrackCoordinate | null => {
   if (!Array.isArray(input) || input.length < 2) return null;
   const lon = Number(input[0]);
   const lat = Number(input[1]);
-  const alt = input[2] === undefined ? undefined : Number(input[2]);
+  const alt =
+    input[2] === undefined ||
+    input[2] === null ||
+    (typeof input[2] === 'string' && input[2].trim() === '')
+      ? undefined
+      : Number(input[2]);
 
   if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
   if (alt !== undefined && !Number.isFinite(alt)) return [lon, lat];

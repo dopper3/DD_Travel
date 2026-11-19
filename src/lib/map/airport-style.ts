@@ -1,12 +1,14 @@
-import { normalizeCartoTheme } from '$lib/map/carto';
+import { normalizeMapTheme, type MapProvider } from '$lib/map/basemap';
 
 export const AIRPORT_STYLE_ROUTE_PATH = '/api/map-styles/airport/style.json';
 export const getAirportGatePillImageId = (theme: string) =>
-  normalizeCartoTheme(theme) === 'dark'
+  normalizeMapTheme(theme) === 'dark'
     ? 'airport-gate-pill-dark'
     : 'airport-gate-pill-light';
 
 const AIRPORT_SOURCE = 'airport-overlay';
+const OPENSTREETMAP_ATTRIBUTION =
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 const AIRPORT_FILL = '#ededed';
 const AIRPORT_FILL_DARK = '#e4e4e4';
 const AIRPORT_OUTLINE = '#d0d0d0';
@@ -1010,6 +1012,62 @@ type AirportStyleDocument = {
 
 export type AirportStyleTheme = 'light' | 'dark';
 
+export type AirportStyleFonts = {
+  regular: readonly string[];
+  emphasis: readonly string[];
+};
+
+export type AirportStyleProvider = MapProvider | 'local';
+
+type AirportStyleLayer = NonNullable<AirportStyleDocument['layers']>[number];
+
+const excludeAerodromes = ['!=', ['get', 'kind'], 'aerodrome'];
+
+const adaptProviderLayers = (
+  layers: AirportStyleLayer[],
+  provider: AirportStyleProvider,
+): AirportStyleLayer[] => {
+  switch (provider) {
+    case 'openfreemap':
+      return layers.filter(
+        (layer) =>
+          layer.type !== 'symbol' ||
+          layer['source-layer'] !== 'aerodrome_label',
+      );
+    case 'carto':
+    case 'local':
+      return layers;
+    case 'protomaps':
+      return layers.map((layer) => {
+        if (
+          layer.type !== 'symbol' ||
+          layer['source-layer'] !== 'pois' ||
+          layer.id !== 'pois'
+        ) {
+          return layer;
+        }
+
+        return {
+          ...layer,
+          filter: layer.filter
+            ? ['all', layer.filter, excludeAerodromes]
+            : excludeAerodromes,
+        };
+      });
+    default: {
+      const exhaustive: never = provider;
+      return exhaustive;
+    }
+  }
+};
+
+const hasOpenStreetMapAttribution = (style: AirportStyleDocument) =>
+  Object.values(style.sources ?? {}).some(
+    (source) =>
+      typeof source.attribution === 'string' &&
+      source.attribution.toLowerCase().includes('openstreetmap'),
+  );
+
 const insertOverlayLayers = (
   style: AirportStyleDocument,
   layersToInsert: ReadonlyArray<Record<string, unknown>>,
@@ -1021,12 +1079,23 @@ const insertOverlayLayers = (
   const fallbackInsertIndex = layers.findIndex(
     (layer) => layer.type === 'symbol',
   );
-  const insertIndex =
+  // OpenFreeMap dark draws water labels before its runways and roads, so the
+  // first symbol layer alone can land the overlay underneath them.
+  const groundLinesInsertIndex =
+    layers.findLastIndex(
+      (layer) =>
+        layer.type !== 'symbol' &&
+        (layer['source-layer'] === 'aeroway' ||
+          layer['source-layer'] === 'transportation'),
+    ) + 1;
+  const insertIndex = Math.max(
+    groundLinesInsertIndex,
     groundInsertIndex !== -1
       ? groundInsertIndex + 1
       : fallbackInsertIndex !== -1
         ? fallbackInsertIndex
-        : layers.length;
+        : layers.length,
+  );
 
   style.layers = [
     ...layers.slice(0, insertIndex),
@@ -1070,11 +1139,60 @@ const applyThemeOverrides = (
   });
 };
 
-export const buildPmtilesAirportStyle = (
+const applyAirportFonts = (
+  style: AirportStyleDocument,
+  fonts: AirportStyleFonts,
+) => {
+  style.layers = (style.layers ?? []).map((layer) => {
+    if (layer.source !== AIRPORT_SOURCE || layer.type !== 'symbol') {
+      return layer;
+    }
+
+    const layout = layer.layout;
+    if (!layout || typeof layout !== 'object' || Array.isArray(layout)) {
+      return layer;
+    }
+
+    const textFont = Reflect.get(layout, 'text-font');
+    const emphasized =
+      Array.isArray(textFont) &&
+      textFont.some(
+        (font) =>
+          typeof font === 'string' &&
+          (font.includes('Bold') || font.includes('SemiBold')),
+      );
+
+    return {
+      ...layer,
+      layout: {
+        ...layout,
+        'text-font': [...(emphasized ? fonts.emphasis : fonts.regular)],
+      },
+    };
+  });
+};
+
+export const buildAirportStyle = (
   style: Record<string, unknown>,
-  theme: AirportStyleTheme = 'light',
+  {
+    theme = 'light',
+    fonts,
+    creditsOpenStreetMap = false,
+    provider,
+  }: {
+    theme?: AirportStyleTheme;
+    fonts: AirportStyleFonts;
+    creditsOpenStreetMap?: boolean;
+    provider: AirportStyleProvider;
+  },
 ) => {
   const rewrittenStyle = structuredClone(style) as AirportStyleDocument;
+  rewrittenStyle.layers = adaptProviderLayers(
+    rewrittenStyle.layers ?? [],
+    provider,
+  );
+  const needsOpenStreetMapAttribution =
+    !creditsOpenStreetMap && !hasOpenStreetMapAttribution(rewrittenStyle);
 
   rewrittenStyle.name =
     theme === 'dark' ? 'Airport Style (Dark)' : 'Airport Style';
@@ -1083,6 +1201,9 @@ export const buildPmtilesAirportStyle = (
     [AIRPORT_SOURCE]: {
       type: 'vector',
       url: 'pmtiles:///airport-overlay.pmtiles',
+      attribution: needsOpenStreetMapAttribution
+        ? OPENSTREETMAP_ATTRIBUTION
+        : '',
     },
   };
 
@@ -1109,6 +1230,7 @@ export const buildPmtilesAirportStyle = (
   });
 
   applyThemeOverrides(rewrittenStyle, theme);
+  applyAirportFonts(rewrittenStyle, fonts);
 
   return rewrittenStyle;
 };

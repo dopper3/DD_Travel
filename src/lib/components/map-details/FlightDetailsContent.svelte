@@ -10,9 +10,11 @@
   let {
     details,
     seatUserId,
+    hasTrack,
   }: {
     details: ReturnType<typeof useFlightDetails>;
     seatUserId?: string;
+    hasTrack: boolean;
   } = $props();
 </script>
 
@@ -27,7 +29,7 @@
 
 {#snippet actions()}
   {#if details.flight}
-    <FlightDetailsActions />
+    <FlightDetailsActions {hasTrack} />
   {/if}
 {/snippet}
 
@@ -45,6 +47,7 @@
     <FlightDetailsBody
       flight={details.flight}
       prefs={details.prefs}
+      milestones={details.milestones}
       {seatUserId}
       onShowInList={details.showInList}
     />

@@ -13,3 +13,4 @@ export { default as CustomFieldsPage } from './custom-fields-page/CustomFieldsPa
 export { default as IntegrationsPage } from './IntegrationsPage.svelte';
 export { default as EmailImportPage } from './EmailImportPage.svelte';
 export { default as CalendarPage } from './CalendarPage.svelte';
+export { default as RolesPage } from './roles-page/RolesPage.svelte';

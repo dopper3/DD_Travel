@@ -1,9 +1,17 @@
-import { authedProcedure, router } from '../trpc';
+import { authedProcedure, permissionProcedure, router } from '../trpc';
 
 import { db } from '$lib/db';
+import {
+  disableFeed,
+  enableFeed,
+  getFeed,
+  regenerateFeedToken,
+  updateFeed,
+} from '$lib/server/utils/calendar-feed';
 import { appConfig } from '$lib/server/utils/config';
 import { listAllFlights } from '$lib/server/utils/flight';
 import { generateString } from '$lib/server/utils/random';
+import { calendarUpdateSchema } from '$lib/zod/calendar';
 
 const EVENT_COLUMNS = [
   'id',
@@ -30,11 +38,16 @@ const getOrCreateFeedToken = async (): Promise<string> => {
   return token;
 };
 
-// The calendar is shared household-wide: every authed user of this private
-// instance sees all users' flights, stays, and events (color-coded by person
-// client-side). This intentionally bypasses the admin-only scoping of
-// flight.list / stay.list, which remain unchanged for the map and lists.
+// Two calendar features share this router:
+//  - list / feedUrl / regenerateFeedToken: the household-wide travel calendar
+//    (flights, stays, and events of every user) and its shared iCal feed.
+//  - get / enable / update / regenerate / disable: upstream AirTrail's
+//    per-user flight calendar feed (Settings -> Export).
 export const calendarRouter = router({
+  // The calendar is shared household-wide: every authed user of this private
+  // instance sees all users' flights, stays, and events (color-coded by person
+  // client-side). This intentionally bypasses the per-user scoping of
+  // flight.list / stay.list, which remain unchanged for the map and lists.
   list: authedProcedure.query(async () => {
     const [flights, stays, events] = await Promise.all([
       listAllFlights(),
@@ -73,5 +86,43 @@ export const calendarRouter = router({
     const token = generateString();
     await appConfig.set({ calendar: { feedToken: token } });
     return `${ctx.url.origin}/api/calendar/${token}.ics`;
+  }),
+
+  get: authedProcedure.query(async ({ ctx: { user } }) => {
+    const feed = await getFeed(user.id);
+    if (!feed) {
+      return { enabled: false as const };
+    }
+
+    return {
+      enabled: true as const,
+      token: feed.token,
+      reminderOffsetMinutes: feed.reminderOffsetMinutes,
+      showEmoji: feed.showEmoji,
+      lastFetched: feed.lastFetched,
+    };
+  }),
+
+  enable: permissionProcedure('flight.export.own').mutation(
+    async ({ ctx: { user } }) => {
+      return await enableFeed(user.id);
+    },
+  ),
+
+  update: permissionProcedure('flight.export.own')
+    .input(calendarUpdateSchema)
+    .mutation(async ({ ctx: { user }, input }) => {
+      return await updateFeed(user.id, input);
+    }),
+
+  regenerate: permissionProcedure('flight.export.own').mutation(
+    async ({ ctx: { user } }) => {
+      return await regenerateFeedToken(user.id);
+    },
+  ),
+
+  disable: authedProcedure.mutation(async ({ ctx: { user } }) => {
+    await disableFeed(user.id);
+    return { ok: true as const };
   }),
 });

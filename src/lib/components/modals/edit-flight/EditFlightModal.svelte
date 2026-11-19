@@ -5,6 +5,7 @@
   import { zod4 as zod } from 'sveltekit-superforms/adapters';
 
   import { page } from '$app/state';
+  import { hasClientPermission } from '$lib/authorization/permissions';
 
   import {
     FlightCustomFieldsModal,
@@ -22,6 +23,7 @@
   import { openModalsState } from '$lib/state.svelte';
   import { toFlightTrackInput } from '$lib/track/schema';
   import { api, trpc } from '$lib/trpc';
+  import { invalidateFlightData } from '$lib/trpc/invalidation';
   import { type FlightData } from '$lib/utils';
   import { decomposeToLocal, isUsingAmPm } from '$lib/utils/datetime';
   import { flightFormSchema } from '$lib/zod/flight';
@@ -53,6 +55,7 @@
       entityType: 'flight_passenger',
     });
   let customFieldValues = $state<Record<number, unknown>>({});
+  let customFieldsDirty = $state(false);
   /** Field IDs that have values saved in the database for this flight. */
   let savedFieldIds = $state<Set<number>>(new Set());
   let customFieldsModal = $state<ReturnType<typeof FlightCustomFieldsModal>>();
@@ -91,6 +94,7 @@
         customFieldValues = Object.fromEntries(
           values.map((v) => [v.fieldId, v.value]),
         );
+        customFieldsDirty = false;
         savedFieldIds = new Set(values.map((v) => v.fieldId));
         const passengerValues = await Promise.all(
           flight.raw.passengers.map(async (passenger) => ({
@@ -111,24 +115,30 @@
             new Set(values.map((value) => value.fieldId)),
           ]),
         );
-        formData.update((current) => ({
-          ...current,
-          passengers: current.passengers.map((passenger) => ({
-            ...passenger,
-            customFields: Object.fromEntries(
-              (passenger.id
-                ? valuesByPassenger.get(passenger.id)
-                : undefined
-              )?.map((value) => [value.fieldId, value.value]) ?? [],
-            ),
-          })),
-        }));
+        formData.update(
+          (current) => ({
+            ...current,
+            passengers: current.passengers.map((passenger) => ({
+              ...passenger,
+              customFields: Object.fromEntries(
+                (passenger.id
+                  ? valuesByPassenger.get(passenger.id)
+                  : undefined
+                )?.map((value) => [value.fieldId, value.value]) ?? [],
+              ),
+            })),
+          }),
+          { taint: 'untaint' },
+        );
         const track = await api.flightTrack.get.query(flight.id);
         if (cancelled) return;
-        formData.update((current) => ({
-          ...current,
-          track: track ? toFlightTrackInput(track) : undefined,
-        }));
+        formData.update(
+          (current) => ({
+            ...current,
+            track: track ? toFlightTrackInput(track) : undefined,
+          }),
+          { taint: 'untaint' },
+        );
       } catch (e) {
         console.error(e);
       } finally {
@@ -242,10 +252,10 @@
       onUpdate({ form }) {
         if (form.message) {
           if (form.message.type === 'success') {
-            trpc.flight.list.utils.invalidate();
-            trpc.flightTrack.list.utils.invalidate();
+            void invalidateFlightData();
             toast.success(form.message.text);
             open = false;
+            customFieldsDirty = false;
             return;
           }
           toast.error(form.message.text);
@@ -253,7 +263,7 @@
       },
     },
   );
-  const { form: formData, enhance, submitting } = form;
+  const { form: formData, enhance, submitting, tainted } = form;
 </script>
 
 {#if showTrigger}
@@ -268,7 +278,18 @@
   </Button>
 {/if}
 
-<Modal bind:open closeOnOutsideClick={false} class="max-w-screen-lg">
+<Modal
+  bind:open
+  dismissal="form"
+  dirty={form.isTainted($tainted) || customFieldsDirty}
+  busy={$submitting || passengerCustomFieldsLoading}
+  onDiscard={() => {
+    form.reset();
+    customFieldValues = {};
+    customFieldsDirty = false;
+  }}
+  class="max-w-screen-lg"
+>
   <ModalBreadcrumbHeader
     section="Flights"
     title="Edit flight"
@@ -292,8 +313,12 @@
             bind:this={customFieldsModal}
             definitions={$customFieldDefinitions.data ?? []}
             bind:values={customFieldValues}
+            bind:dirty={customFieldsDirty}
             {savedFieldIds}
-            onOpenSettings={page.data.user?.role !== 'user'
+            onOpenSettings={hasClientPermission(
+              page.data.authorization,
+              'custom_fields.manage',
+            )
               ? () => {
                   open = false;
                   // Wait for both popstates (custom fields modal + this modal)

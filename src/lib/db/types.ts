@@ -4,6 +4,7 @@ import type {
   airport,
   api_key,
   event,
+  calendar_feed,
   flight,
   flight_track,
   public_share,
@@ -13,7 +14,12 @@ import type {
   visited_country,
 } from '$lib/db/schema';
 import type { FlightTrackInput } from '$lib/track/schema';
-import type { Insertable, Selectable } from 'kysely';
+import type { Insertable, Kysely, Selectable, Transaction } from 'kysely';
+import type { DB } from '$lib/db/schema';
+import type { FieldType } from '$lib/utils/custom-fields';
+
+/** Either a pooled connection or an open transaction. */
+export type DatabaseConnection = Kysely<DB> | Transaction<DB>;
 
 export type FullUser = Selectable<user>;
 export type User = Omit<FullUser, 'password'>;
@@ -21,7 +27,9 @@ export const publicUserFields = [
   'id',
   'username',
   'displayName',
-  'role',
+  'roleId',
+  'isOwner',
+  'roleAssignmentSource',
   'distanceUnit',
   'windSpeedUnit',
   'temperatureUnit',
@@ -32,8 +40,14 @@ export const publicUserFields = [
   'flightTimeDisplay',
   'landingPage',
 ] as const satisfies readonly (keyof User)[];
-export type PublicUser = Pick<User, (typeof publicUserFields)[number]>;
-export type PageUser = PublicUser & { hasOAuthLinked: boolean };
+export type PublicUser = Pick<User, (typeof publicUserFields)[number]> & {
+  roleName: string | null;
+};
+export type DirectoryUser = PublicUser & { canManage: boolean };
+export type PageUser = PublicUser & {
+  hasOAuthLinked: boolean;
+  hasPassword: boolean;
+};
 export type ApiKey = Omit<Selectable<api_key>, 'key' | 'userId'>;
 export type Aircraft = Selectable<aircraft>;
 export type Airline = Selectable<airline>;
@@ -42,6 +56,12 @@ export type CreateAirport = Insertable<airport>;
 export type FlightPassengerRecord = Selectable<flight_passenger>;
 export type FlightPassenger = FlightPassengerRecord & {
   user: Pick<User, 'id' | 'displayName' | 'username'> | null;
+};
+export type FlightCustomFieldValue = {
+  label: string;
+  fieldType: FieldType;
+  /** Airport, airline and aircraft values hold the name instead of the id. */
+  value: unknown;
 };
 export type Flight = Omit<
   Selectable<flight>,
@@ -52,6 +72,8 @@ export type Flight = Omit<
   passengers: FlightPassenger[];
   aircraft: Aircraft | null;
   airline: Airline | null;
+  /** Only `flight.list` attaches these, for the flight list. */
+  customFieldValues?: FlightCustomFieldValue[];
 };
 export type FlightTrack = Selectable<flight_track>;
 export type Stay = Selectable<stay>;
@@ -89,6 +111,7 @@ export type CreateFlight = FlightRecord & {
   track?: FlightTrackInput | null;
 };
 export type PublicShare = Selectable<public_share>;
+export type CalendarFeed = Selectable<calendar_feed>;
 export type VisitedCountry = Selectable<visited_country>;
 
 export function wasVisited(country: Pick<VisitedCountry, 'status'>): boolean {
@@ -134,6 +157,14 @@ export const SeatClasses = [
 export const FlightReasons = ['leisure', 'business', 'crew', 'other'] as const;
 export const FlightDatePrecisions = ['day', 'month', 'year'] as const;
 export type FlightDatePrecision = (typeof FlightDatePrecisions)[number];
+
+export const ShareFlightSelections = [
+  'all',
+  'past',
+  'upcoming',
+  'custom',
+] as const;
+export type ShareFlightSelection = (typeof ShareFlightSelections)[number];
 
 export const VisitedCountryStatus = [
   'lived',

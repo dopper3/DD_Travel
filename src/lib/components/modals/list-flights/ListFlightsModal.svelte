@@ -8,17 +8,19 @@
     PlaneLanding,
     X,
   } from '@o7/icon/lucide';
-  import { isBefore, isAfter } from 'date-fns';
   import { tick } from 'svelte';
 
   import DeleteFlightModal from './DeleteFlightModal.svelte';
   import EditFlightAction from './EditFlightAction.svelte';
   import EmptyFlightsState from './EmptyFlightsState.svelte';
+  import { buildFlightIndicators } from './flight-indicators';
+  import FlightIndicators from './FlightIndicators.svelte';
   import {
     buildFlightListYears,
     paginateFlightListYears,
     sortByDepartureDesc,
   } from './flight-list-groups';
+  import { createFlightListAccess } from './flight-list-access';
   import MobileFlightList from './MobileFlightList.svelte';
   import PastFlightsDivider from './PastFlightsDivider.svelte';
   import Toolbar from './Toolbar.svelte';
@@ -43,11 +45,7 @@
   import * as Tooltip from '$lib/components/ui/tooltip';
   import type { NavigateFlights } from '$lib/flight-navigation';
   import { canShowFlightOnMap } from '$lib/flight-visibility';
-  import {
-    flightAddedState,
-    flightListFocusState,
-    flightScopeState,
-  } from '$lib/state.svelte';
+  import { flightAddedState, flightListFocusState } from '$lib/state.svelte';
   import {
     cn,
     cancelHighlight,
@@ -58,9 +56,14 @@
     type FlightData,
   } from '$lib/utils';
   import { formatAircraft } from '$lib/utils/data/aircraft';
+  import {
+    buildTimingSummary,
+    type TimingStatus,
+  } from '$lib/utils/flight-timing';
   import { Duration, parseLocalizeISO } from '$lib/utils/datetime';
   import { formatFlightDate, getPreferences } from '$lib/utils/preferences';
   import { isMediumScreen } from '$lib/utils/size';
+  import { urlForView } from '$lib/view-paths';
 
   let {
     open = $bindable<boolean>(),
@@ -73,6 +76,7 @@
     readonly = false,
     seatUserId,
     showPassengerDetails = false,
+    trackedFlightIds,
     onNavigate,
   }: {
     open?: boolean;
@@ -85,10 +89,32 @@
     readonly?: boolean;
     seatUserId?: string;
     showPassengerDetails?: boolean;
+    trackedFlightIds?: Set<number>;
     onNavigate?: NavigateFlights;
   } = $props();
 
+  const parseRunwayTime = (value: string | null, airport: Airport | null) =>
+    value && airport ? parseLocalizeISO(value, airport.tz) : null;
+
+  const timingClass = (status: TimingStatus) => ({
+    'text-green-600 dark:text-green-400': status === 'early',
+    'text-red-600 dark:text-red-400': status === 'late',
+  });
+
   const prefs = $derived(getPreferences(appPage.data.user));
+  const access = $derived(
+    createFlightListAccess({
+      authorization: appPage.data.authorization,
+      userId: appPage.data.user?.id ?? null,
+      readonly,
+    }),
+  );
+  const canCreateFlight = $derived(access.canCreateFlight);
+  const canUpdateFlight = (flight: FlightData) =>
+    access.canUpdateFlight(flight);
+  const canDeleteFlight = (flight: FlightData) =>
+    access.canDeleteFlight(flight);
+  const canBulkDelete = $derived(access.canBulkDelete(filteredFlights));
 
   const formattedFlights = $derived.by(() => {
     const data = filteredFlights;
@@ -109,17 +135,27 @@
             ? parseLocalizeISO(f.raw.arrivalScheduled, f.to.tz)
             : null;
 
-        let depStatus: 'early' | 'late' | null = null;
-        if (depDate && depScheduled) {
-          if (isBefore(depDate, depScheduled)) depStatus = 'early';
-          else if (isAfter(depDate, depScheduled)) depStatus = 'late';
-        }
-
-        let arrStatus: 'early' | 'late' | null = null;
-        if (arrDate && arrScheduled) {
-          if (isBefore(arrDate, arrScheduled)) arrStatus = 'early';
-          else if (isAfter(arrDate, arrScheduled)) arrStatus = 'late';
-        }
+        const takeoffActual = parseRunwayTime(f.raw.takeoffActual, f.from);
+        const landingActual = parseRunwayTime(f.raw.landingActual, f.to);
+        const takeoffScheduled = parseRunwayTime(
+          f.raw.takeoffScheduled,
+          f.from,
+        );
+        const landingScheduled = parseRunwayTime(f.raw.landingScheduled, f.to);
+        const depTiming = buildTimingSummary({
+          gateActual: depDate,
+          gateScheduled: depScheduled,
+          runwayActual: takeoffActual,
+          runwayScheduled: takeoffScheduled,
+          side: 'departure',
+        });
+        const arrTiming = buildTimingSummary({
+          gateActual: arrDate,
+          gateScheduled: arrScheduled,
+          runwayActual: landingActual,
+          runwayScheduled: landingScheduled,
+          side: 'arrival',
+        });
 
         return {
           ...f,
@@ -135,12 +171,18 @@
               ? formatFlightDate(f.date, f.datePrecision, prefs)
               : null,
           arrAt: (arrDate ?? arrScheduled) as Date | null,
-          depStatus,
-          arrStatus,
+          depTiming,
+          arrTiming,
           seat: formatSeatForUser(f, seatUserId),
           passengerLabels: showPassengerDetails
             ? getFlightPassengerLabels(f)
             : [],
+          indicators: buildFlightIndicators(f, {
+            hasTrack: trackedFlightIds?.has(f.id) ?? false,
+            viewerId: seatUserId ?? null,
+            includePassengers: !showPassengerDetails,
+            datePrefs: prefs,
+          }),
         };
       }),
     );
@@ -361,6 +403,7 @@
   bind:open
   class="md:max-w-full flex flex-col md:h-full md:rounded-none!"
   drawerNoPadding
+  historyUrl={() => urlForView('flights')}
 >
   <div class="max-md:max-h-[calc(100dvh-200px)] max-md:overflow-auto">
     <div class="flex flex-col gap-2 max-md:px-4 max-md:py-4">
@@ -414,37 +457,36 @@
         </p>
       {/if}
 
-      {#if filters}
-        <Toolbar
-          bind:filters
-          bind:tempFilters
-          bind:flights
-          bind:selecting
-          bind:selectedFlights
-          bind:page
-          pageCount={flightListPages.length}
-          {showingFrom}
-          {showingTo}
-          {hasTempFilters}
-          numOfFlights={filteredFlights.length}
-          modalOpen={open &&
-            !addFlightOpen &&
-            !mobileEditOpen &&
-            !deleteModalOpen}
-          onAddFlight={readonly
-            ? undefined
-            : () => {
-                addFlightOpen = true;
-              }}
-        />
-      {/if}
+      <Toolbar
+        bind:filters
+        bind:tempFilters
+        bind:flights
+        bind:selecting
+        bind:selectedFlights
+        bind:page
+        pageCount={flightListPages.length}
+        {showingFrom}
+        {showingTo}
+        {hasTempFilters}
+        numOfFlights={filteredFlights.length}
+        canSelect={canBulkDelete}
+        modalOpen={open &&
+          !addFlightOpen &&
+          !mobileEditOpen &&
+          !deleteModalOpen}
+        onAddFlight={!canCreateFlight
+          ? undefined
+          : () => {
+              addFlightOpen = true;
+            }}
+      />
     </div>
     {#if flightsByYear.length === 0}
       <EmptyFlightsState
         {flights}
         {hasTempFilters}
         onShowAllFlights={hasTempFilters ? clearTempFilters : undefined}
-        onAddFlight={readonly
+        onAddFlight={!canCreateFlight
           ? undefined
           : () => {
               addFlightOpen = true;
@@ -454,10 +496,12 @@
       <MobileFlightList
         bind:this={mobileFlightListRef}
         {flightsByYear}
-        selecting={readonly ? false : selecting}
+        selecting={canBulkDelete ? selecting : false}
         bind:selectedFlights
-        onEdit={readonly ? undefined : handleMobileEdit}
-        onDelete={readonly ? undefined : handleDelete}
+        onEdit={handleMobileEdit}
+        onDelete={handleDelete}
+        {canUpdateFlight}
+        {canDeleteFlight}
         onShowOnMap={readonly || !onNavigate ? undefined : showFlightOnMap}
         {readonly}
       />
@@ -466,7 +510,7 @@
       <ScrollArea type="hover">
         <div
           class={cn(
-            'hidden gap-y-2 md:grid md:grid-cols-[max-content_32px_minmax(16rem,1fr)_12px_auto] lg:grid-cols-[max-content_12px_minmax(0,12rem)_12px_minmax(16rem,1fr)_12px_auto] xl:grid-cols-[max-content_12px_minmax(0,12rem)_12px_minmax(0,12rem)_12px_minmax(18rem,1fr)_12px_auto]',
+            'hidden gap-y-2 md:grid md:grid-cols-[max-content_12px_minmax(12rem,1fr)_12px_auto] lg:grid-cols-[max-content_12px_minmax(0,12rem)_12px_minmax(16rem,1fr)_12px_auto] xl:grid-cols-[max-content_12px_minmax(0,12rem)_12px_minmax(0,12rem)_12px_minmax(18rem,1fr)_12px_auto]',
             {
               'gap-y-4': showPassengerDetails,
             },
@@ -496,7 +540,7 @@
                 {#each group.flights as flight, legIndex (flight.id)}
                   {@const continuesAbove = legIndex > 0}
                   {@const continuesBelow = legIndex < group.flights.length - 1}
-                  {@const outlined = !readonly && selecting}
+                  {@const outlined = canBulkDelete && selecting}
                   <div
                     id="flight-list-row-{flight.id}"
                     class="relative col-span-full grid grid-cols-subgrid scroll-mt-24 rounded-lg"
@@ -506,7 +550,7 @@
                     {/if}
                     <Card
                       onclick={() => {
-                        if (!readonly && selecting) {
+                        if (canBulkDelete && selecting) {
                           if (selectedFlights.includes(flight.id)) {
                             selectedFlights = selectedFlights.filter(
                               (id) => id !== flight.id,
@@ -563,7 +607,7 @@
                         {@render flightAndTailNumber(flight)}
                       </div>
                       <div class="hidden xl:block" aria-hidden="true"></div>
-                      <div class="flex min-w-0 px-8 xl:px-12">
+                      <div class="flex min-w-0 px-4 lg:px-8 xl:px-12">
                         <div
                           class="w-full grid grid-cols-[auto_1fr_auto] gap-3"
                         >
@@ -589,12 +633,15 @@
                           {@render airport(flight.to)}
                         </div>
                       </div>
-                      {#if !readonly}
-                        <div aria-hidden="true"></div>
-                        <div class="hidden md:flex">
+                      <div aria-hidden="true"></div>
+                      <div
+                        class="hidden items-center justify-end gap-3 md:flex"
+                      >
+                        <FlightIndicators indicators={flight.indicators} />
+                        {#if !readonly}
                           {@render actions(flight)}
-                        </div>
-                      {/if}
+                        {/if}
+                      </div>
                     </Card>
                   </div>
                 {/each}
@@ -639,10 +686,8 @@
         airportTz={flight.from?.tz}
         airportLabel={flight.from?.iata}
         side="right"
-        class={cn('text-sm', {
-          'text-green-600 dark:text-green-400': flight.depStatus === 'early',
-          'text-red-600 dark:text-red-400': flight.depStatus === 'late',
-        })}
+        timing={flight.depTiming}
+        class={cn('text-sm', timingClass(flight.depTiming.status))}
       />
     {:else if flight.depFallback}
       <p class="text-sm">{flight.depFallback}</p>
@@ -657,10 +702,11 @@
         airportTz={flight.to?.tz}
         airportLabel={flight.to?.iata}
         side="right"
-        class={cn('text-sm overflow-hidden text-ellipsis whitespace-nowrap', {
-          'text-green-600 dark:text-green-400': flight.arrStatus === 'early',
-          'text-red-600 dark:text-red-400': flight.arrStatus === 'late',
-        })}
+        timing={flight.arrTiming}
+        class={cn(
+          'text-sm overflow-hidden text-ellipsis whitespace-nowrap',
+          timingClass(flight.arrTiming.status),
+        )}
       />
     {/if}
     <p class="text-sm text-transparent">.</p>
@@ -720,15 +766,21 @@
         <MapPin size="20" />
       </Button>
     {/if}
-    <EditFlightAction {flight} triggerDisabled={selecting} />
-    <Button
-      variant="outline"
-      size="icon"
-      disabled={selecting}
-      onclick={() => handleDelete(flight)}
-    >
-      <X size="24" />
-    </Button>
+    {#if canUpdateFlight(flight)}
+      <EditFlightAction {flight} triggerDisabled={selecting} />
+    {/if}
+    {#if canDeleteFlight(flight)}
+      <Button
+        variant="outline"
+        size="icon"
+        disabled={selecting}
+        aria-label="Delete flight"
+        title="Delete flight"
+        onclick={() => handleDelete(flight)}
+      >
+        <X size="24" />
+      </Button>
+    {/if}
   </div>
 {/snippet}
 
@@ -754,10 +806,21 @@
 {/snippet}
 
 {#snippet airport(airport: Airport | null)}
-  <div class="w-11 flex flex-col items-center justify-center">
-    <span class="text-lg font-bold">
-      {airport?.iata || airport?.icao || 'N/A'}
-    </span>
+  <div class="w-20 flex flex-col items-center justify-center">
+    <div class="flex items-center gap-1.5">
+      {#if airport}
+        <img
+          src="https://flagcdn.com/{airport.country.toLowerCase()}.svg"
+          alt={airport.country}
+          loading="lazy"
+          decoding="async"
+          class="h-4 w-6 shrink-0 rounded object-cover shadow-sm"
+        />
+      {/if}
+      <span class="text-lg font-bold">
+        {airport?.iata || airport?.icao || 'N/A'}
+      </span>
+    </div>
     <Tooltip.AutoTooltip
       text={airport?.name || 'Deleted Airport'}
       class="text-center w-32 text-xs text-muted-foreground truncate"

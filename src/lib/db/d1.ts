@@ -1,6 +1,7 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import {
   CompiledQuery,
+  OperationNodeTransformer,
   SqliteAdapter,
   SqliteIntrospector,
   SqliteQueryCompiler,
@@ -15,6 +16,7 @@ import {
   type QueryCompiler,
   type QueryResult,
   type RootOperationNode,
+  type SelectQueryNode,
   type UnknownRow,
 } from 'kysely';
 
@@ -134,8 +136,7 @@ class D1Connection implements DatabaseConnection {
     }
 
     const meta = response.meta as
-      | { changes?: number; last_row_id?: number }
-      | undefined;
+      { changes?: number; last_row_id?: number } | undefined;
 
     return {
       rows: (response.results ?? []) as R[],
@@ -227,6 +228,11 @@ const BOOLEAN_COLUMNS = new Set([
   'custom',
   'required',
   'active',
+  'enabled',
+  'isOwner',
+  'is_owner',
+  'showEmoji',
+  'show_emoji',
   'showMap',
   'showStats',
   'showFlightList',
@@ -254,6 +260,12 @@ const DATE_COLUMNS = new Set([
   'createdAt',
   'updatedAt',
   'lastUsed',
+  'lastFetched',
+  'usedAt',
+  'revokedAt',
+  'last_fetched',
+  'used_at',
+  'revoked_at',
   'expires_at',
   'created_at',
   'updated_at',
@@ -268,6 +280,10 @@ const STORED_JSON_COLUMNS = new Set([
   'options',
   'validationJson',
   'value',
+  // Postgres TEXT[] columns upstream (API key / OAuth scopes) are stored as
+  // JSON array text on D1.
+  'scopes',
+  'grantScopes',
   'default_value',
   'validation_json',
 ]);
@@ -282,6 +298,7 @@ const SUBQUERY_JSON_COLUMNS = new Set([
   'airline',
   'passengers',
   'user',
+  'mappings',
 ]);
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
@@ -349,9 +366,41 @@ const normalizeRow = (row: UnknownRow): UnknownRow => {
   return row;
 };
 
+// Row-locking clauses upstream uses on Postgres. SQLite has no row locks
+// (and rejects the syntax); D1 executes statements serially, so they are
+// simply dropped.
+const LOCK_MODIFIERS = new Set([
+  'ForUpdate',
+  'ForNoKeyUpdate',
+  'ForShare',
+  'ForKeyShare',
+  'NoWait',
+  'SkipLocked',
+]);
+
+class StripLockingTransformer extends OperationNodeTransformer {
+  protected override transformSelectQuery(
+    node: SelectQueryNode,
+    queryId?: Parameters<OperationNodeTransformer['transformNode']>[1],
+  ): SelectQueryNode {
+    const transformed = super.transformSelectQuery(node, queryId);
+    if (!transformed.endModifiers?.length) return transformed;
+    const kept = transformed.endModifiers.filter(
+      (modifier) =>
+        !modifier.modifier || !LOCK_MODIFIERS.has(modifier.modifier),
+    );
+    return {
+      ...transformed,
+      endModifiers: kept.length ? kept : undefined,
+    };
+  }
+}
+
 export class D1ResultPlugin implements KyselyPlugin {
+  readonly #stripLocking = new StripLockingTransformer();
+
   transformQuery(args: PluginTransformQueryArgs): RootOperationNode {
-    return args.node;
+    return this.#stripLocking.transformNode(args.node, args.queryId);
   }
 
   async transformResult(

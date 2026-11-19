@@ -4,13 +4,17 @@
   import { PageHeader } from '../index';
 
   import ApiKeys from './ApiKeys.svelte';
+  import ConnectedApps from './ConnectedApps.svelte';
   import EditPassword from './EditPassword.svelte';
   import OAuth from './OAuth.svelte';
+  import SetPassword from './SetPassword.svelte';
 
   import { page } from '$app/state';
+  import { hasClientPermission } from '$lib/authorization/permissions';
   import { Confirm } from '$lib/components/helpers';
   import { Button } from '$lib/components/ui/button';
-  import { api, trpc } from '$lib/trpc';
+  import { api } from '$lib/trpc';
+  import { invalidateFlightData } from '$lib/trpc/invalidation';
 
   const user = $derived(page.data.user);
 
@@ -18,8 +22,7 @@
     const toastId = toast.loading('Deleting all your flights...');
     try {
       await api.flight.deleteAll.mutate();
-      await trpc.flight.list.utils.invalidate();
-      await trpc.flightTrack.list.utils.invalidate();
+      await invalidateFlightData();
       toast.info('All your flights have been deleted.', { id: toastId });
     } catch (err) {
       console.error(err);
@@ -31,27 +34,40 @@
 <PageHeader title="Security" subtitle="Manage your account security settings.">
   <div class="flex items-center justify-between p-4 rounded-lg border">
     <h4 class="font-medium leading-4">Password</h4>
-    <div>
-      <EditPassword />
-    </div>
+    {#if page.data.demo}
+      <span class="text-sm text-muted-foreground">
+        Can't be changed in the demo
+      </span>
+    {:else}
+      <div>
+        {#if user?.hasPassword === false}
+          <SetPassword />
+        {:else}
+          <EditPassword />
+        {/if}
+      </div>
+    {/if}
   </div>
   <OAuth {user} />
   <ApiKeys />
-  <div class="flex items-center justify-between p-4 rounded-lg border">
-    <h4 class="font-medium leading-4">Danger zone</h4>
-    <div>
-      <Confirm
-        onConfirm={deleteFlights}
-        title="Delete all flights"
-        description="Are you sure you want to delete all your flights? This does not include flights you share with other users. This action cannot be undone."
-        confirmText="Delete"
-      >
-        {#snippet triggerContent({ props })}
-          <Button variant="destructiveOutline" {...props}>
-            Delete all flights
-          </Button>
-        {/snippet}
-      </Confirm>
+  <ConnectedApps />
+  {#if hasClientPermission(page.data.authorization, 'flight.delete.own')}
+    <div class="flex items-center justify-between p-4 rounded-lg border">
+      <h4 class="font-medium leading-4">Danger zone</h4>
+      <div>
+        <Confirm
+          onConfirm={deleteFlights}
+          title="Delete all flights"
+          description="Are you sure you want to delete all your flights? This does not include flights you share with other users. This action cannot be undone."
+          confirmText="Delete"
+        >
+          {#snippet triggerContent({ props })}
+            <Button variant="destructiveOutline" {...props}>
+              Delete all flights
+            </Button>
+          {/snippet}
+        </Confirm>
+      </div>
     </div>
-  </div>
+  {/if}
 </PageHeader>

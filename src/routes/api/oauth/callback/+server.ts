@@ -8,6 +8,12 @@ import type { RequestHandler } from './$types';
 import { db } from '$lib/db';
 import type { User } from '$lib/db/types';
 import { lucia } from '$lib/server/auth';
+import { postLoginTarget } from '$lib/server/oauth/resume';
+import { usernameFromProfile } from '$lib/server/oauth/username';
+import {
+  resolveOAuthRole,
+  updateOAuthManagedUserRole,
+} from '$lib/server/authorization/oauth-role-mapping';
 import { createSession, getUserWithOAuthId } from '$lib/server/utils/auth';
 import { appConfig } from '$lib/server/utils/config';
 import {
@@ -52,8 +58,13 @@ export const POST: RequestHandler = async ({ cookies, request, locals }) => {
   }
 
   let profile: UserInfoResponse;
+  let idTokenClaims: Record<string, unknown>;
   try {
-    profile = await getOAuthProfile(url, expectedState, codeVerifier);
+    ({ profile, idTokenClaims } = await getOAuthProfile(
+      url,
+      expectedState,
+      codeVerifier,
+    ));
   } catch {
     return error(400, 'Invalid OAuth callback, please try again');
   }
@@ -87,6 +98,19 @@ export const POST: RequestHandler = async ({ cookies, request, locals }) => {
       .selectAll()
       .where('oauthId', '=', profile.sub)
       .executeTakeFirst();
+  }
+
+  // Re-evaluate OAuth-managed users on every login when configured. A manual
+  // role assignment changes the source to local and is never overwritten.
+  if (user && user.roleAssignmentSource === 'oauth') {
+    const resolved = await resolveOAuthRole(profile, idTokenClaims);
+    if (resolved.mode === 'on_login' && user.roleId !== resolved.roleId) {
+      const remappedUser = await updateOAuthManagedUserRole(
+        user.id,
+        resolved.roleId,
+      );
+      if (remappedUser) user = remappedUser;
+    }
   }
 
   // Case 3: User has not logged in via OAuth before, but has an account.
@@ -126,11 +150,15 @@ export const POST: RequestHandler = async ({ cookies, request, locals }) => {
       return error(500, 'You do not have an AirTrail account');
     }
 
-    if (!profile.preferred_username) {
-      return error(500, 'Username not provided');
+    const providedUsername = usernameFromProfile(profile);
+    if (!providedUsername) {
+      return error(
+        400,
+        'Your identity provider sent no username or verified email',
+      );
     }
 
-    const username = usernameSchema.safeParse(profile.preferred_username);
+    const username = usernameSchema.safeParse(providedUsername);
     if (!username.success) {
       return error(
         400,
@@ -139,9 +167,18 @@ export const POST: RequestHandler = async ({ cookies, request, locals }) => {
       );
     }
 
+    if (await getUserWithOAuthId(username.data)) {
+      return error(
+        409,
+        `Username ${username.data} is taken, log in and link your account from Settings`,
+      );
+    }
+
     const displayName =
       profile.name ??
       `${profile.given_name || ''} ${profile.family_name || ''}`;
+    const resolved = await resolveOAuthRole(profile, idTokenClaims);
+    const roleAssignmentSource = resolved.mode === 'off' ? 'local' : 'oauth';
     user = await db
       .insertInto('user')
       .values({
@@ -149,7 +186,8 @@ export const POST: RequestHandler = async ({ cookies, request, locals }) => {
         username: username.data,
         displayName,
         oauthId: profile.sub,
-        role: 'user',
+        roleId: resolved.roleId,
+        roleAssignmentSource,
       })
       .returningAll()
       .executeTakeFirst();
@@ -160,5 +198,5 @@ export const POST: RequestHandler = async ({ cookies, request, locals }) => {
   }
 
   await createSession(lucia, user.id, cookies);
-  return json({ success: true });
+  return json({ success: true, redirectTo: postLoginTarget(cookies) });
 };

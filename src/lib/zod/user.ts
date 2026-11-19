@@ -33,7 +33,18 @@ export const preferencesSchema = z.object({
 });
 export type Preferences = z.infer<typeof preferencesSchema>;
 
-export const updatePreferencesSchema = preferencesSchema.partial();
+// Not `preferencesSchema.partial()`: Zod 4 still applies defaults inside
+// optional fields, so every omitted preference would be reset to its default.
+export const updatePreferencesSchema = z.object({
+  distanceUnit: distanceUnitSchema.optional(),
+  windSpeedUnit: windSpeedUnitSchema.optional(),
+  temperatureUnit: temperatureUnitSchema.optional(),
+  pressureUnit: pressureUnitSchema.optional(),
+  timeFormat: timeFormatSchema.optional(),
+  dateFormat: dateFormatSchema.optional(),
+  weekStartsOn: weekStartsOnSchema.optional(),
+  flightTimeDisplay: flightTimeDisplaySchema.optional(),
+});
 export type UpdatePreferences = z.infer<typeof updatePreferencesSchema>;
 
 export const usernameSchema = z
@@ -50,10 +61,10 @@ export const userSchema = z.object({
   username: usernameSchema,
   password: z.string().nonempty().min(8),
   displayName: z.string().nonempty().min(3),
-  role: z.enum(['user', 'admin']).default('user'),
+  roleId: z.string().min(1),
 });
 
-export const editUserSchema = userSchema.omit({ password: true, role: true });
+export const editUserSchema = userSchema.omit({ password: true, roleId: true });
 export const adminEditUserSchema = userSchema
   .omit({ password: true })
   .extend({ id: z.string() });
@@ -79,6 +90,16 @@ export const editPasswordSchema = z
       });
     }
   });
+
+export const setPasswordSchema = z
+  .object({
+    newPassword: z.string().min(8, 'Must be at least 8 characters long'),
+    confirmPassword: z.string(),
+  })
+  .refine(
+    ({ newPassword, confirmPassword }) => newPassword === confirmPassword,
+    { message: 'Passwords do not match', path: ['confirmPassword'] },
+  );
 
 export const addUserSchema = userSchema;
 

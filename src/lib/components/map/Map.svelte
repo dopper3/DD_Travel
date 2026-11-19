@@ -44,9 +44,9 @@
   import { includeFocusedRouteOnMap } from '$lib/flight-visibility';
   import { AIRPORT_DETAIL_LAYER_IDS } from '$lib/map/airport-style';
   import {
-    getDefaultAppMapStyleUrl,
     getAppMapImages,
     getConfiguredAppMapStyleUrl,
+    isManagedAppMapStyleUrl,
   } from '$lib/map/app-style';
   import {
     createMapCameraController,
@@ -54,6 +54,7 @@
     type MapCameraController,
   } from '$lib/map/camera-controller';
   import { hasFallbackFlightArcs } from '$lib/map/flight-layer-data';
+  import { exposeRenderState } from '$lib/map/render-state';
   import {
     initMapPreferences,
     mapPreferences,
@@ -73,6 +74,7 @@
     appConfig,
     flightScopeState,
     flightAddedState,
+    getFlightRouteDisplay,
     mapDetailsState,
   } from '$lib/state.svelte';
   import type { StayPoint } from '$lib/map/stay-layer-data';
@@ -107,11 +109,15 @@
     onNavigate?: NavigateFlights;
   } = $props();
 
-  const showScopeBanner = $derived(flightScopeState.scope !== 'mine');
+  const showScopeBanner = $derived(flightScopeState.current.scope !== 'mine');
   const alignStatusWithDetails = $derived(!!mapDetailsState.selection);
 
   let map: MapLibreMap | undefined = $state.raw(undefined);
   let cameraController: MapCameraController | undefined = $state.raw(undefined);
+  // Hover cards would open over these panels while the pointer crosses the
+  // map on its way to them, so map hover pauses while either is open.
+  let appearancePopoverOpen = $state(false);
+  let filterPopoverOpen = $state(false);
   let canRenderMap = $state(!browser);
   let filterDrawerOpen = $state(false);
   let showPreviousView = $state(false);
@@ -136,9 +142,7 @@
   const openAipLayers = $derived(
     getOpenAipOverlayLayers(mapPreferences.openAipGroups, openAipTheme),
   );
-  const usingDefaultAppStyle = $derived(
-    style === getDefaultAppMapStyleUrl(currentTheme, mapPreferences.basemap),
-  );
+  const usingDefaultAppStyle = $derived(isManagedAppMapStyleUrl(style));
   const openAipTileUrlTemplate = $derived(
     browser
       ? `${window.location.origin}${base}${OPENAIP_TILE_URL_TEMPLATE}`
@@ -176,6 +180,13 @@
   });
   const trackFlightIds = $derived(
     new Set(flightTracks.map((track) => track.flightId)),
+  );
+  const drawsFlightTrack = $derived(
+    drawnFlights.some(
+      (flight) =>
+        trackFlightIds.has(flight.id) &&
+        getFlightRouteDisplay(flight) === 'tracks',
+    ),
   );
   const hasFallbackArcs = $derived(
     hasFallbackFlightArcs(flightArcs, trackFlightIds),
@@ -360,12 +371,28 @@
         const airport = allVisitedAirports.find(
           (a) => a.id === selection.airportId,
         );
+        const routeArcs =
+          selection.view === 'routes'
+            ? drawnFlights.flatMap(({ from, to }) =>
+                from && to && [from.id, to.id].includes(selection.airportId)
+                  ? [{ from, to }]
+                  : [],
+              )
+            : [];
         if (airport) {
-          focusTarget = {
-            type: 'point',
-            center: [airport.lon, airport.lat],
-            zoom: 13,
-          };
+          if (routeArcs.length > 0) {
+            focusTarget = {
+              type: 'arcs',
+              arcs: routeArcs,
+              projection: mapPreferences.projection,
+            };
+          } else {
+            focusTarget = {
+              type: 'point',
+              center: [airport.lon, airport.lat],
+              zoom: 13,
+            };
+          }
         }
       } else if (selection.type === 'stay') {
         const stay = stays.find((s) => s.id === selection.stayId);
@@ -435,6 +462,10 @@
     };
   });
 
+  $effect(() => {
+    if (map) return exposeRenderState(map);
+  });
+
   onMount(() => {
     canRenderMap = supportsMapWebGL();
     initMapPreferences();
@@ -478,6 +509,7 @@
           {openAipConfigured}
           {hasFallbackArcs}
           showTracksSection={flightTracks.length > 0}
+          bind:popoverOpen={appearancePopoverOpen}
         />
       </ControlGroup>
     </Control>
@@ -489,7 +521,7 @@
           </ControlButton>
           {#if filters}
             {#if $isMediumScreen}
-              <Popover.Root>
+              <Popover.Root bind:open={filterPopoverOpen}>
                 <Popover.Trigger>
                   <ControlButton title="Filter flights">
                     <span class="relative inline-flex">
@@ -571,7 +603,7 @@
       }}
     />
 
-    {#if flightTracks.length > 0 && mapPreferences.routeDisplay === 'tracks' && mapPreferences.flightTrackStyle === 'altitude' && !showPreviousView}
+    {#if drawsFlightTrack && mapPreferences.flightTrackStyle === 'altitude' && !showPreviousView}
       <FlightTrackLegend />
     {/if}
 
@@ -597,6 +629,8 @@
       {stays}
       bind:tempFilters
       {onNavigate}
+      hoverEnabled={!appearancePopoverOpen &&
+        !(filterPopoverOpen && $isMediumScreen)}
     />
   </MapLibre>
 

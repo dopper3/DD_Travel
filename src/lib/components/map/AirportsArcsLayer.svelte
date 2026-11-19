@@ -1,10 +1,10 @@
 <script lang="ts">
   import type { Color, Layer, PickingInfo, Position } from '@deck.gl/core';
   import { ArcLayer, ScatterplotLayer } from '@deck.gl/layers';
-  import { MapboxOverlay } from '@deck.gl/mapbox';
+  import { MapLibreOverlay } from '@deck.gl/maplibre';
   import { isTouchDevice } from '@melt-ui/svelte/internal/helpers';
   import { mode } from 'mode-watcher';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, untrack } from 'svelte';
   import {
     Box,
     getId,
@@ -52,10 +52,12 @@
     type DeckPointerEvent,
   } from '$lib/map/map-popup-position';
   import { mapPreferences } from '$lib/map/map-preferences.svelte';
+  import { getOverlayPixelRatio } from '$lib/map/overlay-pixel-ratio';
   import { PreciseArcEndpointsExtension } from '$lib/map/precise-arc-endpoints';
   import type { StayPoint } from '$lib/map/stay-layer-data';
   import {
     closeMapDetails,
+    getFlightRouteDisplay,
     mapDetailsState,
     openAirportDetails,
     openFlightDetails,
@@ -124,6 +126,7 @@
     stays = [],
     tempFilters = $bindable(),
     onNavigate,
+    hoverEnabled = true,
   }: {
     flights: FlightData[];
     flightArcs: FlightArc[];
@@ -131,6 +134,7 @@
     stays?: StayPoint[];
     tempFilters?: TempFilters;
     onNavigate?: NavigateFlights;
+    hoverEnabled?: boolean;
   } = $props();
 
   const visitedAirports = $derived.by(() => {
@@ -150,9 +154,15 @@
     return arcFrequencyPercentileByRoute[routeKey] ?? 0;
   };
 
+  const flightById = $derived.by(() => {
+    return new Map(flights.map((flight) => [flight.id, flight]));
+  });
+
   const activeFlightTracks = $derived.by(() => {
-    if (mapPreferences.routeDisplay !== 'tracks') return [];
-    return flightTracks;
+    return flightTracks.filter((track) => {
+      const flight = flightById.get(track.flightId);
+      return flight && getFlightRouteDisplay(flight) === 'tracks';
+    });
   });
 
   const trackFlightIds = $derived.by(() => {
@@ -171,10 +181,6 @@
 
   const flightTrackPaths = $derived.by(() => {
     return buildFlightTrackPaths(flights, flightArcs, activeFlightTracks);
-  });
-
-  const flightById = $derived.by(() => {
-    return new Map(flights.map((flight) => [flight.id, flight]));
   });
 
   const flightTrackLayerData = $derived.by(() =>
@@ -205,11 +211,21 @@
     return projection?.type ?? projection?.name ?? 'unknown';
   };
 
+  const canHover = () => hoverEnabled && !isTouchDevice();
+
+  const clearHover = () => {
+    if (!hoveredArc && !hoveredAirport) return;
+    hoveredArc = undefined;
+    hoveredAirport = undefined;
+    mapDetailsState.hoveredFlightTrackId = null;
+    layerEvent.value = undefined;
+  };
+
   const handleAirportHover = (
     e: PickingInfo<VisitedAirport>,
     event?: DeckPointerEvent,
   ) => {
-    if (!isTouchDevice()) {
+    if (canHover()) {
       mapDetailsState.hoveredFlightTrackId = null;
       hoveredAirport = e.object ?? undefined;
       popupPosition.update(getDeckPointerPixel(e, event));
@@ -227,7 +243,7 @@
     e: PickingInfo<FlightArc>,
     event?: DeckPointerEvent,
   ) => {
-    if (!isTouchDevice()) {
+    if (canHover()) {
       mapDetailsState.hoveredFlightTrackId = null;
       hoveredArc = e.object ?? undefined;
       popupPosition.update(getDeckPointerPixel(e, event));
@@ -245,7 +261,7 @@
     e: PickingInfo<FlightTrackPath>,
     event?: DeckPointerEvent,
   ) => {
-    if (!isTouchDevice()) {
+    if (canHover()) {
       mapDetailsState.hoveredFlightTrackId = e.object?.flightId ?? null;
       hoveredArc = e.object ?? undefined;
       popupPosition.update(getDeckPointerPixel(e, event));
@@ -329,7 +345,7 @@
     }
   };
 
-  let layer: MapboxOverlay | undefined = $state();
+  let layer: MapLibreOverlay | undefined = $state();
   let layerProjection: string | undefined = $state(undefined);
   let currentMapProjection = $state('unknown');
   const isGlobe = $derived(mapPreferences.projection === 'globe');
@@ -339,6 +355,30 @@
     if (loaded && layer && map) {
       map.removeControl(layer);
     }
+  });
+
+  $effect(() => {
+    if (!hoverEnabled) untrack(clearHover);
+  });
+
+  // deck.gl only reports the end of a hover when a pick under the pointer comes
+  // up empty, and it skips picking once the pointer is off the canvas. Leaving
+  // straight from a route onto a map control, or pressing one, would otherwise
+  // leave the card open on top of it.
+  $effect(() => {
+    if (!map) return;
+    const canvas = map.getCanvas();
+
+    const handlePointerDown = (e: PointerEvent) => {
+      if (!canvas.contains(e.target as Node)) clearHover();
+    };
+
+    canvas.addEventListener('pointerleave', clearHover);
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    return () => {
+      canvas.removeEventListener('pointerleave', clearHover);
+      document.removeEventListener('pointerdown', handlePointerDown, true);
+    };
   });
 
   $effect(() => {
@@ -495,7 +535,7 @@
   };
 
   const AIRPORT_CIRCLE_SIZE = {
-    small: { scale: 0.4, maxPixels: 45 },
+    small: { scale: 0.2, maxPixels: 20 },
     medium: { scale: 0.7, maxPixels: 70 },
     large: { scale: 1, maxPixels: 100 },
   } as const;
@@ -758,6 +798,9 @@
               ? GLOBE_ARC_PARAMETERS
               : MERCATOR_ROUTE_PARAMETERS,
             extensions: [globeOcclusion],
+            // Display paths are unwrapped past ±180 to stay continuous, but
+            // mercator only repeats geometry that lies inside one world.
+            wrapLongitude: !isGlobe,
           },
           appearance: {
             getWidth: getVisibleArcWidth,
@@ -814,11 +857,19 @@
       map.removeControl(layer);
     }
 
-    const nextLayer = new MapboxOverlay({
+    const nextLayer = new MapLibreOverlay({
       id,
       interleaved: isGlobe,
       onClick: handleMapClick,
       layers: buildLayers(),
+      ...(isGlobe
+        ? {}
+        : {
+            useDevicePixels: getOverlayPixelRatio(
+              map.getCanvas(),
+              map.getContainer(),
+            ),
+          }),
     });
     map.addControl(nextLayer);
     layer = nextLayer;
@@ -840,6 +891,55 @@
 
   const isStayPoint = (data: unknown): data is StayPoint =>
     typeof data === 'object' && data !== null && 'checkIn' in data;
+  $effect(() => {
+    if (!layer || !map || layerProjection !== 'mercator') return;
+
+    const currentLayer = layer;
+    const currentMap = map;
+    const syncPixelRatio = () => {
+      currentLayer.setProps({
+        useDevicePixels: getOverlayPixelRatio(
+          currentMap.getCanvas(),
+          currentMap.getContainer(),
+        ),
+      });
+    };
+
+    currentMap.on('resize', syncPixelRatio);
+    return () => {
+      currentMap.off('resize', syncPixelRatio);
+    };
+  });
+
+  // After a basemap switch, `MapLibreOverlay` only re-adds its interleaved
+  // layer group if the new style has already finished loading when it sees
+  // `styledata`, which it usually hasn't. Without a re-sync the globe loses
+  // its arcs until something else updates the overlay, like a hover.
+  $effect(() => {
+    if (!map || !layer) return;
+    const currentMap = map;
+    const overlay = layer;
+    let pending = false;
+
+    const resync = () => {
+      if (!pending || !currentMap.isStyleLoaded()) return;
+      pending = false;
+      overlay.setProps({ layers: buildLayers() });
+    };
+    const markPending = () => {
+      pending = true;
+      resync();
+    };
+
+    currentMap.on('style.load', markPending);
+    currentMap.on('data', resync);
+    currentMap.on('idle', resync);
+    return () => {
+      currentMap.off('style.load', markPending);
+      currentMap.off('data', resync);
+      currentMap.off('idle', resync);
+    };
+  });
 
   const isVisitedAirport = (data: unknown): data is VisitedAirport =>
     typeof data === 'object' && data !== null && 'country' in data;
@@ -851,6 +951,7 @@
 {#if layer}
   <Popup
     openOn="hover"
+    popupClass="map-hover-popup"
     anchor="top-left"
     offset={20}
     onopen={popupPosition.setPopup}

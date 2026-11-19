@@ -63,6 +63,13 @@
       .map((s) => s.userId)
       .filter((id): id is string => id !== null);
   };
+
+  const getExcludedGuestNames = (currentIndex: number): string[] => {
+    return $formData.passengers
+      .filter((_, i) => i !== currentIndex)
+      .map((s) => s.guestName)
+      .filter((name): name is string => !!name);
+  };
 </script>
 
 <section>
@@ -79,6 +86,7 @@
                   bind:userId={$formData.passengers[index].userId}
                   bind:guestName={$formData.passengers[index].guestName}
                   excludeUserIds={getExcludedUserIds(index)}
+                  excludeGuestNames={getExcludedGuestNames(index)}
                   placeholderError={!!$errors?.passengers?.[index]?.userId
                     ?.length}
                 />
@@ -163,11 +171,10 @@
                         value={$formData.passengers[index]?.flightReason ??
                           undefined}
                         onValueChange={(value) => {
-                          const passenger = $formData.passengers[index];
-                          if (passenger) {
-                            passenger.flightReason = isFlightReason(value)
-                              ? value
-                              : null;
+                          // Assign through the store so superforms sees it.
+                          if ($formData.passengers[index]) {
+                            $formData.passengers[index].flightReason =
+                              isFlightReason(value) ? value : null;
                           }
                         }}
                         allowDeselect

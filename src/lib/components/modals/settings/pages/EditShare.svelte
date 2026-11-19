@@ -13,6 +13,7 @@
     ModalBody,
     ModalBreadcrumbHeader,
   } from '$lib/components/ui/modal';
+  import type { ShareFlightSelection } from '$lib/db/types';
   import { trpc } from '$lib/trpc';
   import { shareSchema } from '$lib/zod/share';
   import { TextTooltip } from '$lib/components/ui/tooltip/index.js';
@@ -26,6 +27,7 @@
     showMap: boolean;
     showStats: boolean;
     showFlightList: boolean;
+    flightSelection: ShareFlightSelection;
     dateFrom: string | null;
     dateTo: string | null;
     showFlightNumbers: boolean;
@@ -56,6 +58,7 @@
     showMap: share.showMap,
     showStats: share.showStats,
     showFlightList: share.showFlightList,
+    flightSelection: share.flightSelection,
     dateFrom: share.dateFrom || '',
     dateTo: share.dateTo || '',
     showFlightNumbers: share.showFlightNumbers,
@@ -84,7 +87,7 @@
       },
     },
   );
-  const { enhance } = form;
+  const { enhance, submitting, tainted } = form;
 </script>
 
 <TextTooltip content="Edit share">
@@ -93,7 +96,13 @@
   </Button>
 </TextTooltip>
 
-<Modal bind:open>
+<Modal
+  bind:open
+  dismissal="form"
+  dirty={form.isTainted($tainted)}
+  busy={$submitting}
+  onDiscard={() => form.reset()}
+>
   <ModalBreadcrumbHeader section="Shares" title="Edit share" icon={SquarePen} />
   <ModalBody>
     <form

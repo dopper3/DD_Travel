@@ -227,7 +227,9 @@ const EVENT_SCHEMA = {
           start_time: str(
             'Local start time, 24h HH:MM. Empty for all-day events',
           ),
-          end_date: str('End date if the event spans multiple days, YYYY-MM-DD'),
+          end_date: str(
+            'End date if the event spans multiple days, YYYY-MM-DD',
+          ),
           end_time: str('Local end time, 24h HH:MM'),
           location: str('Venue name and/or address as written'),
           notes: str(
@@ -338,9 +340,8 @@ const findOwner = async (db: Kysely<DB>): Promise<{ id: string }> => {
   const owner = await db
     .selectFrom('user')
     .select('id')
-    .orderBy(
-      sql`CASE "role" WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END`,
-    )
+    .orderBy('isOwner', 'desc')
+    .orderBy(sql`CASE "role_id" WHEN 'role-administrator' THEN 0 ELSE 1 END`)
     .limit(1)
     .executeTakeFirst();
   if (!owner) throw new Error('No user found to assign imports to');

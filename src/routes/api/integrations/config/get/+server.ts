@@ -2,17 +2,29 @@ import { json } from '@sveltejs/kit';
 
 import type { RequestHandler } from './$types';
 
+import { hasPermission } from '$lib/server/authorization/authorize';
 import { appConfig } from '$lib/server/utils/config';
 
 export const GET: RequestHandler = async ({ locals }) => {
-  const user = locals.user;
-  if (!user || user.role === 'user') {
+  if (
+    !locals.authorization ||
+    !hasPermission(locals.authorization, 'instance.integrations.manage')
+  ) {
     return new Response('Unauthorized', { status: 401 });
   }
 
   const config = await appConfig.get();
   const aeroDataBoxKey = config?.integrations?.aeroDataBoxKey ?? null;
+  const aeroDataBoxEndpoint =
+    config?.integrations?.aeroDataBoxEndpoint ?? 'rapidapi';
   const openAipKey = config?.integrations?.openAipKey ?? null;
+  const aircraftPhotosEnabled =
+    config?.integrations?.aircraftPhotosEnabled ?? false;
 
-  return json({ aeroDataBoxKey, openAipKey });
+  return json({
+    aeroDataBoxKey,
+    aeroDataBoxEndpoint,
+    openAipKey,
+    aircraftPhotosEnabled,
+  });
 };

@@ -20,7 +20,11 @@
   import type { FlightFilters } from '$lib/components/flight-filters/types';
   import type { StayListItem } from '$lib/db/types';
   import type { NavigateFlights } from '$lib/flight-navigation';
-  import { closeMapDetails, mapDetailsState } from '$lib/state.svelte';
+  import {
+    closeMapDetails,
+    isFocusedFlight,
+    mapDetailsState,
+  } from '$lib/state.svelte';
   import type { FlightData } from '$lib/utils';
   import { isMediumScreen } from '$lib/utils/size';
 
@@ -29,6 +33,7 @@
     stays = [],
     filters = $bindable(),
     seatUserId,
+    trackedFlightIds,
     onNavigate,
     onEditStay,
     onDeleteStay,
@@ -37,6 +42,7 @@
     stays?: StayListItem[];
     filters?: FlightFilters;
     seatUserId?: string;
+    trackedFlightIds: Set<number>;
     onNavigate: NavigateFlights;
     onEditStay?: (stay: StayListItem) => void;
     onDeleteStay?: (stay: StayListItem) => void;
@@ -54,9 +60,21 @@
     () => flights,
     () => filters,
     navigateFlights,
+    () => trackedFlightIds,
   );
 
-  const flight = useFlightDetails(() => flights, navigateFlights);
+  const flight = useFlightDetails(
+    () => flights,
+    navigateFlights,
+    () => seatUserId,
+  );
+
+  const hasTrack = $derived(
+    flights.some(
+      (candidate) =>
+        trackedFlightIds.has(candidate.id) && isFocusedFlight(candidate),
+    ),
+  );
 
   const mobileOpen = $derived.by(() => {
     const selection = mapDetailsState.selection;
@@ -75,8 +93,8 @@
 
 {#if $isMediumScreen}
   <AirportDetailsContent details={airport} hasFilters={!!filters} />
-  <RouteDetailsContent details={route} hasFilters={!!filters} />
-  <FlightDetailsContent details={flight} {seatUserId} />
+  <RouteDetailsContent details={route} hasFilters={!!filters} {hasTrack} />
+  <FlightDetailsContent details={flight} {seatUserId} {hasTrack} />
 {:else}
   {#snippet mobileHeader()}
     {#if mapDetailsState.selection?.type === 'airport' && airport.airport}
@@ -107,10 +125,11 @@
       <RouteDetailsActions
         hasFilters={!!filters}
         filterActive={route.routeFilterActive}
+        {hasTrack}
         onToggleFilter={route.toggleRouteFilter}
       />
     {:else if mapDetailsState.selection?.type === 'flight' && flight.flight}
-      <FlightDetailsActions />
+      <FlightDetailsActions {hasTrack} />
     {/if}
   {/snippet}
 
@@ -133,6 +152,7 @@
     {:else if mapDetailsState.selection?.type === 'route' && route.routeAirports}
       <RouteDetailsBody
         routeFlights={route.routeFlights}
+        hasTrack={route.hasTrack}
         airlineCount={route.airlineCount}
         distance={route.distance}
         lastFlownLabel={route.lastFlownLabel}
@@ -144,6 +164,7 @@
       <FlightDetailsBody
         flight={flight.flight}
         prefs={flight.prefs}
+        milestones={flight.milestones}
         {seatUserId}
         onShowInList={flight.showInList}
       />

@@ -1,7 +1,9 @@
 import type { Kysely } from 'kysely';
+import { isDeepStrictEqual } from 'node:util';
 import { sql } from 'kysely';
 
 import type { DB } from '$lib/db/schema';
+import type { Flight, FlightCustomFieldValue } from '$lib/db/types';
 import {
   isCustomFieldValueEmpty,
   type EntityType,
@@ -11,7 +13,7 @@ import {
 
 type InputValueArray = Array<{ fieldId: number; value?: unknown | null }>;
 type InputValueRecord = Record<string, unknown>;
-type IncomingValues = InputValueArray | InputValueRecord | null | undefined;
+type IncomingValues = InputValueArray | InputValueRecord | null;
 
 export class CustomFieldValidationError extends Error {
   constructor(message: string) {
@@ -24,7 +26,7 @@ type NormalizedIncomingEntry =
   | { fieldId: number; value: unknown | null }
   | { key: string; value: unknown | null };
 
-const normalizeIncomingEntries = (values: IncomingValues) => {
+const normalizeIncomingEntries = (values: IncomingValues | undefined) => {
   const normalized: NormalizedIncomingEntry[] = [];
 
   if (!values) return normalized;
@@ -69,7 +71,7 @@ type Definition = {
 
 /** Resolve incoming entries (by fieldId or key) to a map of fieldId → value. */
 const resolveIncomingValues = (
-  values: IncomingValues,
+  values: IncomingValues | undefined,
   defsById: Map<number, Definition>,
   defsByKey: Map<string, Definition>,
 ): Map<number, unknown | null> => {
@@ -117,6 +119,22 @@ const mergeValues = (
     }
   }
   return merged;
+};
+
+export const getCustomFieldEntriesToPersist = (
+  existingValues: ReadonlyMap<number, unknown>,
+  defaultsToPersist: ReadonlyMap<number, unknown>,
+  incomingValues: ReadonlyMap<number, unknown | null>,
+) => {
+  const entries = new Map<number, unknown | null>(defaultsToPersist);
+  for (const [fieldId, value] of incomingValues) {
+    const changesExistingValue = isCustomFieldValueEmpty(value)
+      ? existingValues.has(fieldId)
+      : !existingValues.has(fieldId) ||
+        !isDeepStrictEqual(existingValues.get(fieldId), value);
+    if (changesExistingValue) entries.set(fieldId, value);
+  }
+  return entries;
 };
 
 /** Write or delete a single custom field value row. */
@@ -168,7 +186,40 @@ export const persistEntityCustomFields = async (
     values?: IncomingValues;
   },
 ) => {
-  const defs = await db
+  const plan = await prepareEntityCustomFieldPlan(db, {
+    entityType,
+    entities: [{ entityId, values }],
+  });
+  validateEntityCustomFieldPlan(plan);
+  await persistEntityCustomFieldPlan(db, plan, [entityId]);
+};
+
+type PlannedCustomFieldEntity = {
+  changed: boolean;
+  mergedValues: Map<number, unknown>;
+  entriesToPersist: Map<number, unknown | null>;
+};
+
+export type EntityCustomFieldPlan = {
+  entityType: EntityType;
+  definitions: Definition[];
+  entities: PlannedCustomFieldEntity[];
+};
+
+export const prepareEntityCustomFieldPlan = async (
+  db: Kysely<DB>,
+  {
+    entityType,
+    entities,
+  }: {
+    entityType: EntityType;
+    entities: Array<{
+      entityId: string | null;
+      values?: IncomingValues;
+    }>;
+  },
+): Promise<EntityCustomFieldPlan> => {
+  const definitions = await db
     .selectFrom('customFieldDefinition')
     .select([
       'id',
@@ -184,59 +235,184 @@ export const persistEntityCustomFields = async (
     .where('active', '=', true)
     .execute();
 
-  const defsById = new Map(defs.map((d) => [d.id, d]));
-  const defsByKey = new Map(defs.map((d) => [d.key, d]));
-
-  const existingRows = await db
-    .selectFrom('customFieldValue')
-    .select(['fieldId', 'value'])
-    .where('entityType', '=', entityType)
-    .where('entityId', '=', entityId)
-    .execute();
-
-  const existingValues = new Map<number, unknown>(
-    existingRows.map((row) => [row.fieldId, row.value]),
+  const definitionsById = new Map(
+    definitions.map((definition) => [definition.id, definition]),
   );
-
-  const incomingByFieldId = resolveIncomingValues(values, defsById, defsByKey);
-
-  // Auto-apply defaults for fields that are missing both saved and incoming values.
-  const defaultsToPersist = new Map<number, unknown>();
-  for (const def of defs) {
-    if (
-      def.defaultValue != null &&
-      !existingValues.has(def.id) &&
-      !incomingByFieldId.has(def.id)
-    ) {
-      defaultsToPersist.set(def.id, def.defaultValue);
-    }
+  const definitionsByKey = new Map(
+    definitions.map((definition) => [definition.key, definition]),
+  );
+  const entityIds = [
+    ...new Set(
+      entities.flatMap(({ entityId }) => (entityId === null ? [] : [entityId])),
+    ),
+  ];
+  const existingRows =
+    entityIds.length === 0
+      ? []
+      : await db
+          .selectFrom('customFieldValue')
+          .select(['entityId', 'fieldId', 'value'])
+          .where('entityType', '=', entityType)
+          .where('entityId', 'in', entityIds)
+          .execute();
+  const existingByEntity = new Map<string, Map<number, unknown>>();
+  for (const row of existingRows) {
+    const existing = existingByEntity.get(row.entityId) ?? new Map();
+    existing.set(row.fieldId, row.value);
+    existingByEntity.set(row.entityId, existing);
   }
 
-  const mergedValues = mergeValues(
-    existingValues,
-    defaultsToPersist,
-    incomingByFieldId,
-  );
+  const plannedEntities = entities.map(({ entityId, values }) => {
+    const existingValues =
+      entityId === null
+        ? new Map<number, unknown>()
+        : (existingByEntity.get(entityId) ?? new Map<number, unknown>());
+    const incomingValues = resolveIncomingValues(
+      values,
+      definitionsById,
+      definitionsByKey,
+    );
 
-  for (const def of defs) {
-    const message = validateCustomFieldValue(def, mergedValues.get(def.id));
-    if (message) {
+    const defaultsToPersist = new Map<number, unknown>();
+    for (const definition of definitions) {
+      if (
+        definition.defaultValue != null &&
+        !existingValues.has(definition.id) &&
+        !incomingValues.has(definition.id)
+      ) {
+        defaultsToPersist.set(definition.id, definition.defaultValue);
+      }
+    }
+
+    const entriesToPersist = getCustomFieldEntriesToPersist(
+      existingValues,
+      defaultsToPersist,
+      incomingValues,
+    );
+
+    return {
+      changed: entriesToPersist.size > 0,
+      mergedValues: mergeValues(
+        existingValues,
+        defaultsToPersist,
+        incomingValues,
+      ),
+      entriesToPersist,
+    };
+  });
+
+  return { entityType, definitions, entities: plannedEntities };
+};
+
+export const validateEntityCustomFieldPlan = (plan: EntityCustomFieldPlan) => {
+  for (const entity of plan.entities) {
+    for (const definition of plan.definitions) {
+      const message = validateCustomFieldValue(
+        definition,
+        entity.mergedValues.get(definition.id),
+      );
+      if (!message) continue;
       const detail =
-        message === `${def.label} is required`
+        message === `${definition.label} is required`
           ? 'is required'
           : `${message.charAt(0).toLowerCase()}${message.slice(1)}`;
       throw new CustomFieldValidationError(
-        `Custom field "${def.label}" ${detail}`,
+        `Custom field "${definition.label}" ${detail}`,
       );
     }
   }
+};
 
-  const entriesToPersist = new Map<number, unknown | null>(defaultsToPersist);
-  for (const [fieldId, value] of incomingByFieldId) {
-    entriesToPersist.set(fieldId, value);
+export const persistEntityCustomFieldPlan = async (
+  db: Kysely<DB>,
+  plan: EntityCustomFieldPlan,
+  entityIds: readonly string[],
+) => {
+  if (entityIds.length !== plan.entities.length) {
+    throw new Error('Custom-field plan does not match its persisted entities');
+  }
+  for (const [index, entity] of plan.entities.entries()) {
+    const entityId = entityIds[index];
+    if (!entityId) {
+      throw new Error('Custom-field entity ID is missing');
+    }
+    for (const [fieldId, value] of entity.entriesToPersist) {
+      await persistEntry(db, plan.entityType, entityId, fieldId, value);
+    }
+  }
+};
+
+const ENTITY_TABLES = ['airport', 'airline', 'aircraft'] as const;
+type EntityTable = (typeof ENTITY_TABLES)[number];
+
+const isEntityTable = (fieldType: string): fieldType is EntityTable =>
+  (ENTITY_TABLES as readonly string[]).includes(fieldType);
+
+const loadEntityNames = async (
+  db: Kysely<DB>,
+  rows: Array<{ fieldType: string; value: unknown }>,
+) => {
+  const names = await Promise.all(
+    ENTITY_TABLES.map(async (table) => {
+      const ids = new Set<number>();
+      for (const row of rows) {
+        if (row.fieldType === table && typeof row.value === 'number') {
+          ids.add(row.value);
+        }
+      }
+      if (!ids.size) return [table, new Map<number, string>()] as const;
+
+      const found = await db
+        .selectFrom(table)
+        .select(['id', 'name'])
+        .where('id', 'in', [...ids])
+        .execute();
+      return [table, new Map(found.map((row) => [row.id, row.name]))] as const;
+    }),
+  );
+  return Object.fromEntries(names) as Record<EntityTable, Map<number, string>>;
+};
+
+/*
+ * Only `flight.list` attaches custom field values, for the flight list. Shares,
+ * the API and backups go through the base flight query and never see them.
+ * The flight ids go in as one array parameter, because a parameter per flight
+ * would hit Postgres's 65535 limit on large instances.
+ */
+export const attachFlightCustomFieldValues = async (
+  db: Kysely<DB>,
+  flights: Flight[],
+): Promise<Flight[]> => {
+  if (!flights.length) return flights;
+
+  const flightIds = flights.map((flight) => String(flight.id));
+  const rows = await db
+    .selectFrom('customFieldValue as v')
+    .innerJoin('customFieldDefinition as d', 'd.id', 'v.fieldId')
+    .select(['v.entityId', 'v.value', 'd.label', 'd.fieldType'])
+    .where('v.entityType', '=', 'flight')
+    .where('d.active', '=', true)
+    // D1: a plain IN list; the dialect inlines it past 100 parameters.
+    .where('v.entityId', 'in', flightIds)
+    .orderBy('d.order')
+    .orderBy('d.label')
+    .execute();
+
+  const names = await loadEntityNames(db, rows);
+  const valuesByFlight = new Map<string, FlightCustomFieldValue[]>();
+  for (const row of rows) {
+    const value = isEntityTable(row.fieldType)
+      ? names[row.fieldType].get(row.value as number)
+      : row.value;
+    if (isCustomFieldValueEmpty(value)) continue;
+
+    const values = valuesByFlight.get(row.entityId) ?? [];
+    values.push({ label: row.label, fieldType: row.fieldType, value });
+    valuesByFlight.set(row.entityId, values);
   }
 
-  for (const [fieldId, value] of entriesToPersist) {
-    await persistEntry(db, entityType, entityId, fieldId, value);
-  }
+  return flights.map((flight) => ({
+    ...flight,
+    customFieldValues: valuesByFlight.get(String(flight.id)) ?? [],
+  }));
 };

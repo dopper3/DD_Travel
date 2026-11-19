@@ -4,6 +4,7 @@ import { zod4 as zod } from 'sveltekit-superforms/adapters';
 
 import type { RequestHandler } from './$types';
 
+import { hasPermission } from '$lib/server/authorization/authorize';
 import { appConfig } from '$lib/server/utils/config';
 import { integrationsConfigSchema } from '$lib/zod/config';
 
@@ -11,13 +12,20 @@ export const POST: RequestHandler = async ({ locals, request }) => {
   const form = await superValidate(request, zod(integrationsConfigSchema));
   if (!form.valid) return actionResult('failure', { form });
 
-  const user = locals.user;
-  if (!user || user.role === 'user') {
+  if (
+    !locals.authorization ||
+    !hasPermission(locals.authorization, 'instance.integrations.manage')
+  ) {
     return actionResult('error', 'Unauthorized', 401);
   }
 
   const currentConfig = (await appConfig.get())?.integrations;
-  let { aeroDataBoxKey, openAipKey } = form.data;
+  let {
+    aeroDataBoxKey,
+    aeroDataBoxEndpoint,
+    openAipKey,
+    aircraftPhotosEnabled,
+  } = form.data;
   if (typeof aeroDataBoxKey === 'string' && aeroDataBoxKey.trim() === '') {
     aeroDataBoxKey = null;
   }
@@ -38,6 +46,17 @@ export const POST: RequestHandler = async ({ locals, request }) => {
 
   if (
     currentConfig &&
+    aeroDataBoxEndpoint !== currentConfig.aeroDataBoxEndpoint &&
+    appConfig.envConfigured?.integrations?.aeroDataBoxEndpoint
+  ) {
+    return error(500, {
+      message:
+        'This config field is controlled by the .env file and cannot be changed here.',
+    });
+  }
+
+  if (
+    currentConfig &&
     openAipKey !== currentConfig.openAipKey &&
     appConfig.envConfigured?.integrations?.openAipKey
   ) {
@@ -47,8 +66,24 @@ export const POST: RequestHandler = async ({ locals, request }) => {
     });
   }
 
+  if (
+    currentConfig &&
+    aircraftPhotosEnabled !== currentConfig.aircraftPhotosEnabled &&
+    appConfig.envConfigured?.integrations?.aircraftPhotosEnabled
+  ) {
+    return error(500, {
+      message:
+        'This config field is controlled by the .env file and cannot be changed here.',
+    });
+  }
+
   const success = await appConfig.set({
-    integrations: { aeroDataBoxKey, openAipKey },
+    integrations: {
+      aeroDataBoxKey,
+      aeroDataBoxEndpoint,
+      openAipKey,
+      aircraftPhotosEnabled,
+    },
   });
 
   if (!success) {

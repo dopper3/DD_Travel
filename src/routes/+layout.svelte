@@ -7,7 +7,9 @@
   import { registerSW } from 'virtual:pwa-register';
 
   import { page } from '$app/state';
+  import { hasClientPermission } from '$lib/authorization/permissions';
   import { NavigationDock } from '$lib/components';
+  import DemoBanner from '$lib/components/demo/DemoBanner.svelte';
   import { TimeDisplayHost } from '$lib/components/display';
   import { ConfirmWrapper, ScreenSize } from '$lib/components/helpers';
   import {
@@ -29,7 +31,9 @@
     }
   });
 
-  const queryClient = data.trpc ? trpc.hydrateFromServer(data.trpc) : undefined;
+  const queryClient = data.trpc
+    ? trpc.hydrateFromServer(() => data.trpc!)
+    : undefined;
 
   onMount(() => {
     // Register the service worker so its precache + runtime map caching take
@@ -44,7 +48,7 @@
 <Toaster />
 <ConfirmWrapper />
 
-{#if data.user && data.user.role !== 'user'}
+{#if hasClientPermission(data.authorization, 'instance.release.check')}
   <NewVersionAnnouncement />
 {/if}
 
@@ -55,12 +59,15 @@
       <AddFlightModal bind:open={openModalsState.addFlight} />
       <TimeDisplayHost />
 
-      <main class="h-full" data-vaul-drawer-wrapper>
+      <main class="h-full" data-drawer-wrapper>
         {@render children()}
       </main>
 
-      {#if data.user && !page.error && !['/login', '/setup'].includes(page.url.pathname)}
+      {#if data.user && !page.error && page.data.chrome !== false}
         <NavigationDock />
+        {#if data.demo}
+          <DemoBanner demo={data.demo} />
+        {/if}
       {/if}
     </TooltipProvider>
   </QueryClientProvider>

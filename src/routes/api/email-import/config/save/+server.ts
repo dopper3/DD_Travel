@@ -4,6 +4,7 @@ import { zod4 as zod } from 'sveltekit-superforms/adapters';
 
 import type { RequestHandler } from './$types';
 
+import { hasPermission } from '$lib/server/authorization/authorize';
 import { appConfig } from '$lib/server/utils/config';
 import { emailImportConfigSchema } from '$lib/zod/config';
 
@@ -11,8 +12,10 @@ export const POST: RequestHandler = async ({ locals, request }) => {
   const form = await superValidate(request, zod(emailImportConfigSchema));
   if (!form.valid) return actionResult('failure', { form });
 
-  const user = locals.user;
-  if (!user || user.role === 'user') {
+  if (
+    !locals.authorization ||
+    !hasPermission(locals.authorization, 'instance.integrations.manage')
+  ) {
     return actionResult('error', 'Unauthorized', 401);
   }
 

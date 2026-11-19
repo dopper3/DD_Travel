@@ -1,7 +1,12 @@
 <script lang="ts">
   import { List } from '@o7/icon/lucide';
 
+  import AircraftPhotoCard from './AircraftPhotoCard.svelte';
+  import FlightMilestones from './FlightMilestones.svelte';
+  import type { FlightMilestone } from './flight-milestones';
+
   import { Button } from '$lib/components/ui/button';
+  import { appConfig } from '$lib/state.svelte';
   import { formatAircraft } from '$lib/utils/data/aircraft';
   import {
     formatSeatForUser,
@@ -10,18 +15,25 @@
     type FlightData,
   } from '$lib/utils';
   import type { FlightPassenger } from '$lib/db/types';
+  import { averageSpeedKmh } from '$lib/stats/records';
   import { Duration } from '$lib/utils/datetime';
-  import { convertDistance, distanceUnitLabel } from '$lib/utils/preferences';
+  import {
+    convertDistance,
+    distanceUnitLabel,
+    formatSpeed,
+  } from '$lib/utils/preferences';
   import type { Preferences } from '$lib/zod/user';
 
   let {
     flight,
     prefs,
+    milestones = [],
     seatUserId,
     onShowInList,
   }: {
     flight: FlightData;
     prefs: Preferences;
+    milestones?: FlightMilestone[];
     seatUserId?: string;
     onShowInList: () => void;
   } = $props();
@@ -35,6 +47,11 @@
   const durationLabel = $derived(
     flight.duration ? Duration.fromSeconds(flight.duration).toString() : null,
   );
+
+  const avgSpeedLabel = $derived.by(() => {
+    const speed = averageSpeedKmh(flight);
+    return speed === null ? null : formatSpeed(speed, prefs);
+  });
 
   const seatLabel = $derived(formatSeatForUser(flight, seatUserId));
 
@@ -93,6 +110,7 @@
       r.push({ label: 'Aircraft', value: formatAircraft(flight) });
     if (distanceLabel) r.push({ label: 'Distance', value: distanceLabel });
     if (durationLabel) r.push({ label: 'Duration', value: durationLabel });
+    if (avgSpeedLabel) r.push({ label: 'Avg. speed', value: avgSpeedLabel });
     if (seatLabel) r.push({ label: 'Seat', value: seatLabel });
     if (departureGate) r.push({ label: 'Departure', value: departureGate });
     if (arrivalGate) r.push({ label: 'Arrival', value: arrivalGate });
@@ -101,6 +119,9 @@
 </script>
 
 <section class="flex flex-col gap-3 px-4 py-4">
+  {#if flight.aircraftReg && appConfig.config?.integrations?.aircraftPhotosEnabled}
+    <AircraftPhotoCard reg={flight.aircraftReg} />
+  {/if}
   {#if rows.length}
     <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
       {#each rows as row (row.label)}
@@ -109,6 +130,8 @@
       {/each}
     </dl>
   {/if}
+
+  <FlightMilestones {milestones} />
 
   {#if passengers.length}
     <div class="flex flex-col gap-1.5">

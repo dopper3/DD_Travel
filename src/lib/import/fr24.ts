@@ -8,10 +8,11 @@ import type {
   FlightDatePrecision,
   FlightPassenger,
 } from '$lib/db/types';
+import { getAirlineMappingKey } from '$lib/import/airline-mapping';
 import type { PlatformOptions } from '$lib/import/model';
 import { parseCsv } from '$lib/utils';
 import { getAircraftByIcao } from '$lib/utils/data/aircraft';
-import { getAirlineByIcao } from '$lib/utils/data/airlines';
+import { getAirlineByCodes } from '$lib/utils/data/airlines';
 import { getAirportByIcao } from '$lib/utils/data/airports/cache';
 import { parseLocalISO, toUtc } from '$lib/utils/datetime';
 
@@ -99,15 +100,20 @@ const extractAirportICAO = (airport: string) => {
   return match.groups?.ICAO;
 };
 
-const AIRLINE_REGEX = /(.*) \([0-9A-Z]{0,2}\/(?<ICAO>[a-zA-Z]{3})\)/;
-const extractAirlineICAO = (airline: string) => {
+const AIRLINE_REGEX =
+  /(?<name>.*) \((?<IATA>[0-9A-Z]{0,2})\/(?<ICAO>[a-zA-Z]{3})\)/;
+const extractAirline = (airline: string) => {
   const match = AIRLINE_REGEX.exec(airline);
-  if (!match) {
+  if (!match?.groups?.ICAO) {
     console.error(`Failed to extract ICAO code from airline: ${airline}`);
     return null;
   }
 
-  return match.groups?.ICAO ?? null;
+  return {
+    icao: match.groups.ICAO,
+    iata: match.groups.IATA || null,
+    name: match.groups.name ?? null,
+  };
 };
 
 const AIRCRAFT_REGEX = /(.*) \((?<ICAO>[A-Z0-9-]{1,4})\)/;
@@ -222,13 +228,20 @@ export const processFR24File = async (
     const flightReason =
       FR24_FLIGHT_REASON_MAP?.[row.flight_reason ?? 'noop'] ?? null;
 
-    const rawAirline = row.airline ? extractAirlineICAO(row.airline) : null;
-    const mappedAirline = rawAirline
-      ? options.airlineMapping?.[rawAirline]
+    const airlineCodes = row.airline ? extractAirline(row.airline) : null;
+    const airlineKey = airlineCodes ? getAirlineMappingKey(airlineCodes) : null;
+    const mappedAirline = airlineKey
+      ? options.airlineMapping?.[airlineKey]
       : undefined;
     const airline =
       mappedAirline ||
-      (rawAirline ? (await getAirlineByIcao(rawAirline)) || null : null);
+      (airlineCodes
+        ? await getAirlineByCodes(
+            airlineCodes.icao,
+            airlineCodes.iata,
+            airlineCodes.name,
+          )
+        : null);
 
     const rawAircraft = row.aircraft ? extractAircraftICAO(row.aircraft) : null;
     const mappedAircraft = rawAircraft
@@ -248,9 +261,9 @@ export const processFR24File = async (
       if (!unknownAirports[toCode]) unknownAirports[toCode] = [];
       unknownAirports[toCode].push(flightIndex);
     }
-    if (!airline && rawAirline) {
-      if (!unknownAirlines[rawAirline]) unknownAirlines[rawAirline] = [];
-      unknownAirlines[rawAirline].push(flightIndex);
+    if (!airline && airlineKey) {
+      if (!unknownAirlines[airlineKey]) unknownAirlines[airlineKey] = [];
+      unknownAirlines[airlineKey].push(flightIndex);
     }
     if (!aircraft && rawAircraft) {
       if (!unknownAircraft[rawAircraft]) unknownAircraft[rawAircraft] = [];
